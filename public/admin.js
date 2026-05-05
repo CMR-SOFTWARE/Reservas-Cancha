@@ -187,6 +187,10 @@ bloqueosList.addEventListener("click", async (event) => {
   if (target.dataset.action !== "quitar-bloqueo") return;
   const id = target.dataset.id;
   if (!id) return;
+  const confirmar = window.confirm(
+    "¿Estas seguro de que queres quitar este bloqueo?"
+  );
+  if (!confirmar) return;
   try {
     await api(`/api/admin/bloqueos/${id}`, { method: "DELETE" });
     setMessage(adminMessage, "Bloqueo eliminado.", false);
@@ -203,7 +207,7 @@ reservasList.addEventListener("click", async (event) => {
   const id = target.dataset.id;
   if (!id) return;
   const confirmar = window.confirm(
-    "¿Seguro que queres cancelar este turno? Esta accion lo libera."
+    "¿Estas seguro de que queres cancelar este turno? Esta accion lo libera."
   );
   if (!confirmar) return;
   try {

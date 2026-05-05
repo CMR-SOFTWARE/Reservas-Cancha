@@ -227,6 +227,10 @@ btnSolicitarCancelacion.addEventListener("click", () => {
     setMensaje("No hay numero de WhatsApp configurado.");
     return;
   }
+  const confirmar = window.confirm(
+    "¿Estas seguro de que queres solicitar la cancelacion del turno?"
+  );
+  if (!confirmar) return;
   window.location.href = buildCancelacionWhatsAppUrl();
 });
 
