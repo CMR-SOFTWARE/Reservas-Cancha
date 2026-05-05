@@ -15,6 +15,7 @@ const aliasTransferencia = document.getElementById("aliasTransferencia");
 const cbuTransferencia = document.getElementById("cbuTransferencia");
 const titularTransferencia = document.getElementById("titularTransferencia");
 const btnSolicitarCancelacion = document.getElementById("btnSolicitarCancelacion");
+const telefonoInput = document.getElementById("telefono");
 
 let config = null;
 let reservasActuales = [];
@@ -142,8 +143,8 @@ function validarPaso1() {
     setMensaje("Ingresa nombre y apellido.");
     return false;
   }
-  if (telefono.length < 6) {
-    setMensaje("Ingresa un telefono valido.");
+  if (!/^\d{6,15}$/.test(telefono)) {
+    setMensaje("Ingresa un telefono valido (solo numeros).");
     return false;
   }
   return true;
@@ -195,6 +196,10 @@ btnBuscar.addEventListener("click", async () => {
   } catch (error) {
     setMensaje(error.message || "Error al cargar horarios.");
   }
+});
+
+telefonoInput.addEventListener("input", () => {
+  telefonoInput.value = telefonoInput.value.replace(/\D/g, "");
 });
 
 btnCerrarModal.addEventListener("click", closeModal);
