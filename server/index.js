@@ -41,7 +41,7 @@ const RESERVAS_FILE = path.join(DATA_DIR, "reservas.json");
 const BLOQUEOS_FILE = path.join(DATA_DIR, "bloqueos.json");
 const UPLOADS_DIR = path.join(DATA_DIR, "uploads");
 
-const CANCHAS = [1, 2];
+const CANCHAS = [11, 7];
 const HORA_INICIO = 10;
 const HORA_FIN = 23;
 const TRANSFER_ALIAS = process.env.TRANSFER_ALIAS || "CANCHAS.FUTBOL.CMR";
