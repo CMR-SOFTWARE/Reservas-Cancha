@@ -358,6 +358,28 @@ function horarioToNumber(horario) {
   return Number(hh);
 }
 
+function toReservaTimestamp(fecha, horario) {
+  if (!fecha || !horario) return NaN;
+  const [year, month, day] = String(fecha).split("-").map(Number);
+  const [hour = 0, minute = 0] = String(horario).split(":").map(Number);
+  if (
+    !Number.isFinite(year) ||
+    !Number.isFinite(month) ||
+    !Number.isFinite(day) ||
+    !Number.isFinite(hour) ||
+    !Number.isFinite(minute)
+  ) {
+    return NaN;
+  }
+  return new Date(year, month - 1, day, hour, minute, 0, 0).getTime();
+}
+
+function isReservaExpirada(reserva, nowMs = Date.now()) {
+  const reservaMs = toReservaTimestamp(reserva.fecha, reserva.horario);
+  if (Number.isNaN(reservaMs)) return false;
+  return reservaMs < nowMs;
+}
+
 function getBloqueoRango(bloqueo) {
   if (bloqueo.diaCompleto) {
     return { desde: HORA_INICIO, hasta: HORA_FIN };
@@ -495,6 +517,47 @@ async function readReservas({ fecha = "", cancha = null } = {}) {
   return rows.map(mapReservaRow);
 }
 
+async function purgeExpiredReservas() {
+  const nowMs = Date.now();
+  const reservas = await readReservas();
+  const expiradas = reservas.filter((r) => isReservaExpirada(r, nowMs));
+  if (!expiradas.length) return 0;
+  const ids = expiradas.map((r) => Number(r.id)).filter((id) => Number.isFinite(id));
+  if (!ids.length) return 0;
+
+  if (USE_SUPABASE) {
+    const archivos = expiradas
+      .map((r) => r.comprobante?.archivo)
+      .filter(Boolean);
+    if (archivos.length) {
+      await supabase.storage.from(SUPABASE_BUCKET).remove(archivos);
+    }
+    const { error } = await supabase.from("reservas").delete().in("id", ids);
+    if (error) throw new Error(error.message);
+    return ids.length;
+  }
+
+  if (USE_KV) {
+    const reservasAll = await readKvArray(KV_RESERVAS_KEY);
+    const idSet = new Set(ids);
+    const restantes = reservasAll.filter((r) => !idSet.has(Number(r.id)));
+    await writeKvArray(KV_RESERVAS_KEY, restantes);
+    return ids.length;
+  }
+
+  if (USE_SQLITE) {
+    const placeholders = ids.map(() => "?").join(", ");
+    await dbRun(`DELETE FROM reservas WHERE id IN (${placeholders})`, ids);
+    return ids.length;
+  }
+
+  const reservasAll = await readJsonArrayFile(RESERVAS_FILE);
+  const idSet = new Set(ids);
+  const restantes = reservasAll.filter((r) => !idSet.has(Number(r.id)));
+  await writeJsonArrayFile(RESERVAS_FILE, restantes);
+  return ids.length;
+}
+
 async function readBloqueos({ fecha = "", cancha = null } = {}) {
   if (USE_SUPABASE) {
     let query = supabase
@@ -615,6 +678,9 @@ function validateReservaPayload(body) {
   if (!generarHorarios().includes(horario)) {
     return "Horario invalido.";
   }
+  if (toReservaTimestamp(fecha, horario) < Date.now()) {
+    return "Ese horario ya paso. Elegi uno actual o futuro.";
+  }
   return null;
 }
 
@@ -654,6 +720,7 @@ app.post("/api/admin/login", async (req, res, next) => {
 
 app.get("/api/reservas", async (req, res, next) => {
   try {
+    await purgeExpiredReservas();
     const fecha = (req.query.fecha || "").trim();
     const cancha = req.query.cancha ? Number(req.query.cancha) : null;
     const reservas = await readReservas({ fecha, cancha });
@@ -676,6 +743,7 @@ app.get("/api/bloqueos", async (req, res, next) => {
 
 app.post("/reservas", upload.single("comprobante"), async (req, res, next) => {
   try {
+    await purgeExpiredReservas();
     const validationError = validateReservaPayload(req.body);
     if (validationError) {
       return res.status(400).json({ error: validationError });
@@ -841,6 +909,7 @@ app.post("/reservas", upload.single("comprobante"), async (req, res, next) => {
 
 app.get("/api/admin/reservas", requireAdmin, async (_req, res, next) => {
   try {
+    await purgeExpiredReservas();
     const reservas = await readReservas();
     const reservasConLink = reservas.map((r) => ({
       ...r,

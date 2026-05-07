@@ -38,6 +38,22 @@ function todayISO() {
   return new Date(date - tzOffset).toISOString().split("T")[0];
 }
 
+function isHorarioPasado(fechaIso, horario) {
+  const [year, month, day] = String(fechaIso).split("-").map(Number);
+  const [hour = 0, minute = 0] = String(horario).split(":").map(Number);
+  if (
+    !Number.isFinite(year) ||
+    !Number.isFinite(month) ||
+    !Number.isFinite(day) ||
+    !Number.isFinite(hour) ||
+    !Number.isFinite(minute)
+  ) {
+    return false;
+  }
+  const fechaHorario = new Date(year, month - 1, day, hour, minute, 0, 0);
+  return fechaHorario.getTime() < Date.now();
+}
+
 async function loadConfig() {
   const response = await fetch("/api/config");
   if (!response.ok) {
@@ -93,11 +109,17 @@ function renderHorarios() {
   config.horarios.forEach((horario) => {
     const ocupado = isOcupado(horario);
     const bloqueo = findBloqueo(horario);
+    const pasado = isHorarioPasado(fechaInput.value, horario);
     const bloqueado = Boolean(bloqueo);
     const btn = document.createElement("button");
     btn.type = "button";
     btn.textContent = horario;
-    if (bloqueado) {
+    if (pasado) {
+      btn.className =
+        "rounded-lg px-3 py-3 font-bold bg-slate-200 text-slate-500 cursor-not-allowed";
+      btn.title = "Horario ya pasado";
+      btn.disabled = true;
+    } else if (bloqueado) {
       btn.className =
         "rounded-lg px-3 py-3 font-bold bg-amber-100 text-amber-800 cursor-not-allowed";
       btn.title = bloqueo.motivo || "Bloqueado por administracion";
