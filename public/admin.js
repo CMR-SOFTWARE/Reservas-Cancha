@@ -87,19 +87,44 @@ function getCanchaEtiqueta(nombreCancha) {
   return found ? found.etiqueta : `Cancha ${nombreCancha}`;
 }
 
+function estadoBadge(estado) {
+  const estilos = {
+    pendiente: "bg-amber-100 text-amber-800",
+    confirmada: "bg-emerald-100 text-emerald-800",
+  };
+  const labels = { pendiente: "Pendiente", confirmada: "Confirmada" };
+  const cls = estilos[estado] || estilos.pendiente;
+  const label = labels[estado] || "Pendiente";
+  return `<span class="rounded-full px-2 py-0.5 text-xs font-semibold ${cls}">${label}</span>`;
+}
+
 function renderReservas(reservas) {
   if (!reservas.length) { reservasList.innerHTML = "<p>No hay reservas.</p>"; return; }
-  reservasList.innerHTML = reservas.map((r) => `
+  const sorted = [...reservas].sort((a, b) => {
+    if (a.estado === "pendiente" && b.estado !== "pendiente") return -1;
+    if (a.estado !== "pendiente" && b.estado === "pendiente") return 1;
+    return 0;
+  });
+  reservasList.innerHTML = sorted.map((r) => `
     <article class="rounded-lg border border-slate-200 bg-slate-50 p-3">
-      <p><strong>${r.nombre}</strong> - ${r.telefono}</p>
-      <p>${getCanchaEtiqueta(r.cancha)} - ${formatFecha(r.fecha)} - ${r.horario}</p>
-      <p>
-        <a href="${r.comprobanteUrl}" target="_blank" rel="noopener noreferrer">Ver comprobante</a>
+      <div class="mb-1 flex items-center gap-2">
+        ${estadoBadge(r.estado)}
+        <strong>${r.nombre}</strong> — ${r.telefono}
+      </div>
+      <p class="text-sm text-slate-600">${getCanchaEtiqueta(r.cancha)} · ${formatFecha(r.fecha)} · ${r.horario}</p>
+      <p class="mt-1">
+        <a href="${r.comprobanteUrl}" target="_blank" rel="noopener noreferrer"
+           class="text-sm text-blue-600 underline">Ver comprobante</a>
       </p>
-      <button class="mt-1 rounded-lg bg-red-700 px-3 py-2 font-semibold text-white hover:bg-red-800"
-        data-action="cancelar" data-id="${r.id}" type="button">
-        Cancelar turno
-      </button>
+      <div class="mt-2 flex flex-wrap gap-2">
+        ${r.estado === "pendiente"
+          ? `<button class="rounded-lg bg-emerald-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-800"
+               data-action="confirmar" data-id="${r.id}" type="button">Confirmar</button>`
+          : `<button class="rounded-lg bg-slate-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-slate-600"
+               data-action="revertir" data-id="${r.id}" type="button">Marcar pendiente</button>`}
+        <button class="rounded-lg bg-red-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-800"
+          data-action="cancelar" data-id="${r.id}" type="button">Cancelar turno</button>
+      </div>
     </article>
   `).join("");
 }
@@ -216,23 +241,39 @@ bloqueosList.addEventListener("click", async (event) => {
 
 reservasList.addEventListener("click", async (event) => {
   const target = event.target;
-  if (!(target instanceof HTMLElement) || target.dataset.action !== "cancelar") return;
-  const id = target.dataset.id;
-  if (!id) return;
-  if (!window.confirm("¿Estas seguro de que queres cancelar este turno? Esta accion lo libera.")) return;
-  try {
-    const data = await api(`/api/${CLUB_SLUG}/admin/reservas/${id}`, { method: "DELETE" });
-    setMessage(adminMessage, "Turno cancelado y liberado.", false);
-    const r = data.reserva;
-    const telefono = r.telefono.replace(/\D/g, "");
-    const fecha = formatFecha(r.fecha);
-    const canchaLabel = getCanchaEtiqueta(r.cancha);
-    const mensajeWa = encodeURIComponent(
-      `Hola ${r.nombre}, te informamos que tu turno en ${canchaLabel} el ${fecha} a las ${r.horario}hs fue cancelado por administración. Disculpá los inconvenientes.`
-    );
-    window.open(`https://wa.me/${telefono}?text=${mensajeWa}`, "_blank");
-    await refreshAdminData();
-  } catch (error) { setMessage(adminMessage, error.message || "No se pudo cancelar el turno."); }
+  if (!(target instanceof HTMLElement)) return;
+  const { action, id } = target.dataset;
+  if (!action || !id) return;
+
+  if (action === "confirmar" || action === "revertir") {
+    const nuevoEstado = action === "confirmar" ? "confirmada" : "pendiente";
+    try {
+      await api(`/api/${CLUB_SLUG}/admin/reservas/${id}/estado`, {
+        method: "PATCH",
+        body: JSON.stringify({ estado: nuevoEstado }),
+      });
+      setMessage(adminMessage, nuevoEstado === "confirmada" ? "Turno confirmado." : "Turno marcado como pendiente.", false);
+      await loadReservasAdmin(filtroFecha.value);
+    } catch (error) { setMessage(adminMessage, error.message || "No se pudo actualizar el estado."); }
+    return;
+  }
+
+  if (action === "cancelar") {
+    if (!window.confirm("¿Estas seguro de que queres cancelar este turno? Esta accion lo libera.")) return;
+    try {
+      const data = await api(`/api/${CLUB_SLUG}/admin/reservas/${id}`, { method: "DELETE" });
+      setMessage(adminMessage, "Turno cancelado y liberado.", false);
+      const r = data.reserva;
+      const telefono = r.telefono.replace(/\D/g, "");
+      const fecha = formatFecha(r.fecha);
+      const canchaLabel = getCanchaEtiqueta(r.cancha);
+      const mensajeWa = encodeURIComponent(
+        `Hola ${r.nombre}, te informamos que tu turno en ${canchaLabel} el ${fecha} a las ${r.horario}hs fue cancelado por administración. Disculpá los inconvenientes.`
+      );
+      window.open(`https://wa.me/${telefono}?text=${mensajeWa}`, "_blank");
+      await refreshAdminData();
+    } catch (error) { setMessage(adminMessage, error.message || "No se pudo cancelar el turno."); }
+  }
 });
 
 // ── Configuración del club ────────────────────────────────────

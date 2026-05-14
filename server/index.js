@@ -162,6 +162,9 @@ async function initDb() {
   if (!reservaColSet.has("club_id")) {
     await dbRun("ALTER TABLE reservas ADD COLUMN club_id INTEGER");
   }
+  if (!reservaColSet.has("estado")) {
+    await dbRun("ALTER TABLE reservas ADD COLUMN estado TEXT NOT NULL DEFAULT 'pendiente'");
+  }
 
   await dbRun(`
     CREATE TABLE IF NOT EXISTS bloqueos (
@@ -490,6 +493,7 @@ function mapReservaRow(row) {
     cancha: String(row.cancha),
     fecha: row.fecha,
     horario: row.horario,
+    estado: row.estado || "pendiente",
     comprobante: {
       nombreOriginal: row.comprobante_nombre_original,
       archivo: row.comprobante_archivo,
@@ -1055,6 +1059,31 @@ app.post("/api/:slug/admin/password", resolveClub, requireAdmin, async (req, res
       "UPDATE admins SET password_salt=?, password_hash=?, password_salt_b=NULL, password_hash_b=NULL, actualizado_en=? WHERE club_id=?",
       [salt, hash, now, clubId]
     );
+    return res.json({ ok: true });
+  } catch (error) { next(error); }
+});
+
+app.patch("/api/:slug/admin/reservas/:id/estado", resolveClub, requireAdmin, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const clubId = req.club.id;
+    const estado = (req.body?.estado || "").trim();
+
+    if (!["pendiente", "confirmada"].includes(estado)) {
+      return res.status(400).json({ error: "Estado inválido." });
+    }
+
+    if (USE_SUPABASE) {
+      const { error } = await supabase.from("reservas")
+        .update({ estado }).eq("id", id).eq("club_id", clubId);
+      if (error) throw new Error(error.message);
+      return res.json({ ok: true });
+    }
+    const result = await dbRun(
+      "UPDATE reservas SET estado = ? WHERE id = ? AND club_id = ?",
+      [estado, id, clubId]
+    );
+    if (!result.changes) return res.status(404).json({ error: "Reserva no encontrada." });
     return res.json({ ok: true });
   } catch (error) { next(error); }
 });
