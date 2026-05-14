@@ -1,9 +1,54 @@
--- Tabla de reservas
+-- ============================================================
+-- ESQUEMA MULTI-TENANT
+-- Ejecutar en el SQL Editor de Supabase
+-- ============================================================
+
+-- Tabla de clubes
+create table if not exists clubs (
+  id bigserial primary key,
+  slug text not null unique,
+  nombre text not null,
+  deporte text not null default 'futbol',
+  logo_url text,
+  whatsapp text not null,
+  transfer_alias text not null,
+  transfer_cbu text not null,
+  transfer_titular text not null,
+  hora_inicio integer not null default 10,
+  hora_fin integer not null default 23,
+  precio text not null default '0',
+  activo boolean not null default true,
+  creado_en text not null
+);
+
+-- Canchas por club
+create table if not exists canchas (
+  id bigserial primary key,
+  club_id bigint not null references clubs(id),
+  nombre text not null,
+  etiqueta text not null,
+  activa boolean not null default true,
+  unique(club_id, nombre)
+);
+
+-- Un admin por club (con dos slots de clave)
+create table if not exists admins (
+  id bigserial primary key,
+  club_id bigint not null unique references clubs(id),
+  password_salt text not null,
+  password_hash text not null,
+  password_salt_b text,
+  password_hash_b text,
+  actualizado_en text not null
+);
+
+-- Reservas con club_id
 create table if not exists reservas (
   id bigserial primary key,
+  club_id bigint references clubs(id),
   nombre text not null,
   telefono text not null,
-  cancha integer not null,
+  cancha text not null,
   fecha text not null,
   horario text not null,
   comprobante_nombre_original text not null,
@@ -13,10 +58,11 @@ create table if not exists reservas (
   creado_en text not null
 );
 
--- Tabla de bloqueos
+-- Bloqueos con club_id
 create table if not exists bloqueos (
   id bigserial primary key,
-  cancha integer not null,
+  club_id bigint references clubs(id),
+  cancha text not null,
   fecha text not null,
   horario text,
   horario_desde text,
@@ -26,17 +72,9 @@ create table if not exists bloqueos (
   creado_en text not null
 );
 
--- Clave de administrador (dos slots opcionales; hash scrypt)
-create table if not exists admin_credential (
-  id integer primary key check (id = 1),
-  password_salt text not null,
-  password_hash text not null,
-  password_salt_b text,
-  password_hash_b text,
-  actualizado_en text not null
-);
-
--- RLS: deshabilitar (la app usa service key, acceso controlado desde el backend)
+-- RLS deshabilitado (el backend usa service key y controla el acceso)
+alter table clubs disable row level security;
+alter table canchas disable row level security;
+alter table admins disable row level security;
 alter table reservas disable row level security;
 alter table bloqueos disable row level security;
-alter table admin_credential disable row level security;

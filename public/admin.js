@@ -1,3 +1,10 @@
+// Extrae el slug del club desde la URL: "/cmr-futbol/admin" -> "cmr-futbol"
+function getClubSlug() {
+  const parts = window.location.pathname.split("/").filter(Boolean);
+  return parts[0] || "";
+}
+const CLUB_SLUG = getClubSlug();
+
 const loginCard = document.getElementById("loginCard");
 const adminPanel = document.getElementById("adminPanel");
 const adminPassword = document.getElementById("adminPassword");
@@ -41,68 +48,75 @@ async function api(url, options = {}) {
       ...(options.headers || {}),
       ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}),
       ...(options.body && !(options.body instanceof FormData)
-        ? { "Content-Type": "application/json" }
-        : {}),
+        ? { "Content-Type": "application/json" } : {}),
     },
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(data.error || "Error de servidor.");
-  }
+  if (!response.ok) throw new Error(data.error || "Error de servidor.");
   return data;
 }
 
 async function loadConfig() {
-  config = await api("/api/config");
-  const options = config.horarios
+  config = await api(`/api/${CLUB_SLUG}/config`);
+
+  // Poblar dropdown de canchas dinamicamente
+  const canchaOptions = config.canchas
+    .map((c) => `<option value="${c.nombre}">${c.etiqueta}</option>`)
+    .join("");
+  bloqCancha.innerHTML = canchaOptions;
+
+  // Poblar selectores de horarios
+  const horarioOptions = config.horarios
     .map((h) => `<option value="${h}">${h}</option>`)
     .join("");
-  bloqHorarioDesde.innerHTML = options;
-  bloqHorarioHasta.innerHTML = options;
+  bloqHorarioDesde.innerHTML = horarioOptions;
+  bloqHorarioHasta.innerHTML = horarioOptions;
+
+  // Actualizar link de volver al menu
+  const linkMenu = document.getElementById("linkMenu");
+  if (linkMenu) linkMenu.href = `/${CLUB_SLUG}`;
+
+  // Actualizar titulo con nombre del club
+  const h1 = document.querySelector("h1");
+  if (h1 && config.nombre) h1.textContent = `Panel Admin - ${config.nombre}`;
+}
+
+function getCanchaEtiqueta(nombreCancha) {
+  if (!config) return `Cancha ${nombreCancha}`;
+  const found = config.canchas.find((c) => c.nombre === String(nombreCancha));
+  return found ? found.etiqueta : `Cancha ${nombreCancha}`;
 }
 
 function renderReservas(reservas) {
-  if (!reservas.length) {
-    reservasList.innerHTML = "<p>No hay reservas.</p>";
-    return;
-  }
-  reservasList.innerHTML = reservas
-    .map(
-      (r) => `
-      <article class="rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p><strong>${r.nombre}</strong> - ${r.telefono}</p>
-        <p>Cancha ${r.cancha} - ${formatFecha(r.fecha)} - ${r.horario}</p>
-        <p>
-          <a href="${r.comprobanteUrl}" target="_blank" rel="noopener noreferrer">Ver comprobante</a>
-        </p>
-        <button class="mt-1 rounded-lg bg-red-700 px-3 py-2 font-semibold text-white hover:bg-red-800" data-action="cancelar" data-id="${r.id}" type="button">
-          Cancelar turno
-        </button>
-      </article>
-    `
-    )
-    .join("");
+  if (!reservas.length) { reservasList.innerHTML = "<p>No hay reservas.</p>"; return; }
+  reservasList.innerHTML = reservas.map((r) => `
+    <article class="rounded-lg border border-slate-200 bg-slate-50 p-3">
+      <p><strong>${r.nombre}</strong> - ${r.telefono}</p>
+      <p>${getCanchaEtiqueta(r.cancha)} - ${formatFecha(r.fecha)} - ${r.horario}</p>
+      <p>
+        <a href="${r.comprobanteUrl}" target="_blank" rel="noopener noreferrer">Ver comprobante</a>
+      </p>
+      <button class="mt-1 rounded-lg bg-red-700 px-3 py-2 font-semibold text-white hover:bg-red-800"
+        data-action="cancelar" data-id="${r.id}" type="button">
+        Cancelar turno
+      </button>
+    </article>
+  `).join("");
 }
 
 function renderBloqueos(bloqueos) {
-  if (!bloqueos.length) {
-    bloqueosList.innerHTML = "<p>No hay bloqueos activos.</p>";
-    return;
-  }
-  bloqueosList.innerHTML = bloqueos
-    .map(
-      (b) => `
-      <article class="rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p><strong>Cancha ${b.cancha}</strong> - ${formatFecha(b.fecha)}</p>
-        <p>${describeBloqueoHorario(b)}</p>
-        <p>Motivo: ${b.motivo}</p>
-        <button class="mt-1 rounded-lg bg-red-700 px-3 py-2 font-semibold text-white hover:bg-red-800" data-action="quitar-bloqueo" data-id="${b.id}" type="button">
-          Quitar bloqueo
-        </button>
-      </article>
-    `
-    )
-    .join("");
+  if (!bloqueos.length) { bloqueosList.innerHTML = "<p>No hay bloqueos activos.</p>"; return; }
+  bloqueosList.innerHTML = bloqueos.map((b) => `
+    <article class="rounded-lg border border-slate-200 bg-slate-50 p-3">
+      <p><strong>${getCanchaEtiqueta(b.cancha)}</strong> - ${formatFecha(b.fecha)}</p>
+      <p>${describeBloqueoHorario(b)}</p>
+      <p>Motivo: ${b.motivo}</p>
+      <button class="mt-1 rounded-lg bg-red-700 px-3 py-2 font-semibold text-white hover:bg-red-800"
+        data-action="quitar-bloqueo" data-id="${b.id}" type="button">
+        Quitar bloqueo
+      </button>
+    </article>
+  `).join("");
 }
 
 function describeBloqueoHorario(bloqueo) {
@@ -115,8 +129,8 @@ function describeBloqueoHorario(bloqueo) {
 
 async function refreshAdminData() {
   const [reservas, bloqueos] = await Promise.all([
-    api("/api/admin/reservas"),
-    api("/api/admin/bloqueos"),
+    api(`/api/${CLUB_SLUG}/admin/reservas`),
+    api(`/api/${CLUB_SLUG}/admin/bloqueos`),
   ]);
   renderReservas(reservas);
   renderBloqueos(bloqueos);
@@ -130,11 +144,8 @@ function setAuthenticatedUI(isAuth) {
 btnLogin.addEventListener("click", async () => {
   try {
     const password = adminPassword.value.trim();
-    if (!password) {
-      setMessage(loginMessage, "Ingresa la clave admin.");
-      return;
-    }
-    const data = await api("/api/admin/login", {
+    if (!password) { setMessage(loginMessage, "Ingresa la clave admin."); return; }
+    const data = await api(`/api/${CLUB_SLUG}/admin/login`, {
       method: "POST",
       body: JSON.stringify({ password }),
     });
@@ -143,21 +154,19 @@ btnLogin.addEventListener("click", async () => {
     setAuthenticatedUI(true);
     setMessage(loginMessage, "");
     await refreshAdminData();
-  } catch (error) {
-    setMessage(loginMessage, error.message || "No se pudo iniciar sesion.");
-  }
+  } catch (error) { setMessage(loginMessage, error.message || "No se pudo iniciar sesion."); }
 });
 
 btnLogout.addEventListener("click", () => {
   adminToken = "";
   localStorage.removeItem("adminToken");
-  window.location.href = "/";
+  window.location.href = `/${CLUB_SLUG}`;
 });
 
 btnCrearBloqueo.addEventListener("click", async () => {
   try {
     const payload = {
-      cancha: Number(bloqCancha.value),
+      cancha: bloqCancha.value,
       fecha: bloqFecha.value,
       horario: bloqHorarioDesde.value,
       horarioDesde: bloqDiaCompleto.checked ? "" : bloqHorarioDesde.value,
@@ -165,15 +174,10 @@ btnCrearBloqueo.addEventListener("click", async () => {
       diaCompleto: bloqDiaCompleto.checked,
       motivo: bloqMotivo.value.trim(),
     };
-    await api("/api/admin/bloqueos", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
+    await api(`/api/${CLUB_SLUG}/admin/bloqueos`, { method: "POST", body: JSON.stringify(payload) });
     setMessage(adminMessage, "Bloqueo creado correctamente.", false);
     await refreshAdminData();
-  } catch (error) {
-    setMessage(adminMessage, error.message || "No se pudo crear el bloqueo.");
-  }
+  } catch (error) { setMessage(adminMessage, error.message || "No se pudo crear el bloqueo."); }
 });
 
 bloqDiaCompleto.addEventListener("change", () => {
@@ -183,47 +187,36 @@ bloqDiaCompleto.addEventListener("change", () => {
 
 bloqueosList.addEventListener("click", async (event) => {
   const target = event.target;
-  if (!(target instanceof HTMLElement)) return;
-  if (target.dataset.action !== "quitar-bloqueo") return;
+  if (!(target instanceof HTMLElement) || target.dataset.action !== "quitar-bloqueo") return;
   const id = target.dataset.id;
   if (!id) return;
-  const confirmar = window.confirm(
-    "¿Estas seguro de que queres quitar este bloqueo?"
-  );
-  if (!confirmar) return;
+  if (!window.confirm("¿Estas seguro de que queres quitar este bloqueo?")) return;
   try {
-    await api(`/api/admin/bloqueos/${id}`, { method: "DELETE" });
+    await api(`/api/${CLUB_SLUG}/admin/bloqueos/${id}`, { method: "DELETE" });
     setMessage(adminMessage, "Bloqueo eliminado.", false);
     await refreshAdminData();
-  } catch (error) {
-    setMessage(adminMessage, error.message || "No se pudo eliminar el bloqueo.");
-  }
+  } catch (error) { setMessage(adminMessage, error.message || "No se pudo eliminar el bloqueo."); }
 });
 
 reservasList.addEventListener("click", async (event) => {
   const target = event.target;
-  if (!(target instanceof HTMLElement)) return;
-  if (target.dataset.action !== "cancelar") return;
+  if (!(target instanceof HTMLElement) || target.dataset.action !== "cancelar") return;
   const id = target.dataset.id;
   if (!id) return;
-  const confirmar = window.confirm(
-    "¿Estas seguro de que queres cancelar este turno? Esta accion lo libera."
-  );
-  if (!confirmar) return;
+  if (!window.confirm("¿Estas seguro de que queres cancelar este turno? Esta accion lo libera.")) return;
   try {
-    const data = await api(`/api/admin/reservas/${id}`, { method: "DELETE" });
+    const data = await api(`/api/${CLUB_SLUG}/admin/reservas/${id}`, { method: "DELETE" });
     setMessage(adminMessage, "Turno cancelado y liberado.", false);
     const r = data.reserva;
     const telefono = r.telefono.replace(/\D/g, "");
     const fecha = formatFecha(r.fecha);
-    const mensaje = encodeURIComponent(
-      `Hola ${r.nombre}, te informamos que tu turno en Cancha ${r.cancha} el ${fecha} a las ${r.horario}hs fue cancelado por administración. Disculpá los inconvenientes.`
+    const canchaLabel = getCanchaEtiqueta(r.cancha);
+    const mensajeWa = encodeURIComponent(
+      `Hola ${r.nombre}, te informamos que tu turno en ${canchaLabel} el ${fecha} a las ${r.horario}hs fue cancelado por administración. Disculpá los inconvenientes.`
     );
-    window.open(`https://wa.me/${telefono}?text=${mensaje}`, "_blank");
+    window.open(`https://wa.me/${telefono}?text=${mensajeWa}`, "_blank");
     await refreshAdminData();
-  } catch (error) {
-    setMessage(adminMessage, error.message || "No se pudo cancelar el turno.");
-  }
+  } catch (error) { setMessage(adminMessage, error.message || "No se pudo cancelar el turno."); }
 });
 
 async function init() {
@@ -234,7 +227,7 @@ async function init() {
       setAuthenticatedUI(true);
       await refreshAdminData();
       return;
-    } catch (_error) {
+    } catch (_) {
       adminToken = "";
       localStorage.removeItem("adminToken");
     }
