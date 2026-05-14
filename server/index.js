@@ -7,8 +7,6 @@ const fs = require("fs/promises");
 const fsSync = require("fs");
 const crypto = require("crypto");
 
-let kv = null;
-try { ({ kv } = require("@vercel/kv")); } catch (_) { kv = null; }
 let sqlite3 = null;
 try { sqlite3 = require("sqlite3").verbose(); } catch (_) { sqlite3 = null; }
 let supabase = null;
@@ -34,10 +32,8 @@ const ADMIN_SCRYPT_OPTS = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 
 const USE_SUPABASE = Boolean(supabase);
 const SUPABASE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET || "comprobantes";
-const USE_KV = !USE_SUPABASE && Boolean(kv) && Boolean(process.env.KV_REST_API_URL) && Boolean(process.env.KV_REST_API_TOKEN);
 const USE_SQLITE = !USE_SUPABASE && Boolean(sqlite3);
 
-// Config del club por defecto, leida desde .env (semilla al crear el primer club)
 const DEFAULT_CLUB_SLUG = (process.env.CLUB_SLUG || "mi-club").toLowerCase().replace(/[^a-z0-9-]/g, "-");
 const DEFAULT_CLUB_NOMBRE = process.env.CLUB_NOMBRE || process.env.TRANSFER_TITULAR || "Mi Club";
 const DEFAULT_CLUB_DEPORTE = process.env.CLUB_DEPORTE || "futbol";
@@ -145,7 +141,6 @@ async function initDb() {
     )
   `);
 
-  // reservas: agregar club_id si no existe, cancha queda como TEXT (SQLite es dinamico)
   await dbRun(`
     CREATE TABLE IF NOT EXISTS reservas (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -168,7 +163,6 @@ async function initDb() {
     await dbRun("ALTER TABLE reservas ADD COLUMN club_id INTEGER");
   }
 
-  // bloqueos: agregar club_id si no existe
   await dbRun(`
     CREATE TABLE IF NOT EXISTS bloqueos (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -188,18 +182,6 @@ async function initDb() {
   if (!bloqueoColSet.has("club_id")) {
     await dbRun("ALTER TABLE bloqueos ADD COLUMN club_id INTEGER");
   }
-
-  // Mantener tabla legacy para que no rompa si ya existe
-  await dbRun(`
-    CREATE TABLE IF NOT EXISTS admin_credential (
-      id INTEGER PRIMARY KEY CHECK (id = 1),
-      password_salt TEXT NOT NULL,
-      password_hash TEXT NOT NULL,
-      password_salt_b TEXT,
-      password_hash_b TEXT,
-      actualizado_en TEXT NOT NULL
-    )
-  `);
 }
 
 // ============================================================
@@ -254,20 +236,13 @@ function parseAdminToken(token) {
 async function verifyAdminPasswordForClub(plain, clubId) {
   if (USE_SQLITE) {
     const row = await dbGet("SELECT * FROM admins WHERE club_id = ? LIMIT 1", [clubId]);
-    if (row) return verifyAdminRowPasswords(plain, row);
-    // Fallback a tabla legacy para clubId 0 (modo JSON/KV)
-    const legacy = await dbGet("SELECT * FROM admin_credential WHERE id = 1 LIMIT 1");
-    if (legacy) return verifyAdminRowPasswords(plain, legacy);
-    return null;
+    return row ? verifyAdminRowPasswords(plain, row) : null;
   }
   if (USE_SUPABASE) {
     const { data } = await supabase.from("admins").select("*").eq("club_id", clubId).maybeSingle();
-    if (data) return verifyAdminRowPasswords(plain, data);
-    return null;
+    return data ? verifyAdminRowPasswords(plain, data) : null;
   }
-  // Fallback JSON/KV: comparacion directa contra env (comportamiento original)
-  return plain === DEFAULT_ADMIN_PASSWORD ||
-    (Boolean(DEFAULT_ADMIN_PASSWORD_SECOND) && plain === DEFAULT_ADMIN_PASSWORD_SECOND);
+  return null;
 }
 
 function requireAdmin(req, res, next) {
@@ -321,25 +296,7 @@ async function getClubBySlug(slug) {
       .from("canchas").select("*").eq("club_id", clubRow.id).eq("activa", true).order("id");
     return mapClubRow(clubRow, canchas || []);
   }
-  // Fallback JSON/KV: solo soporta el club por defecto del .env
-  if (slug !== DEFAULT_CLUB_SLUG) return null;
-  return {
-    id: 0,
-    slug: DEFAULT_CLUB_SLUG,
-    nombre: DEFAULT_CLUB_NOMBRE,
-    deporte: DEFAULT_CLUB_DEPORTE,
-    logoUrl: null,
-    whatsapp: DEFAULT_CLUB_WHATSAPP,
-    transferencia: {
-      alias: DEFAULT_CLUB_ALIAS,
-      cbu: DEFAULT_CLUB_CBU,
-      titular: DEFAULT_CLUB_TITULAR,
-    },
-    horaInicio: DEFAULT_CLUB_HORA_INICIO,
-    horaFin: DEFAULT_CLUB_HORA_FIN,
-    precio: DEFAULT_CLUB_PRECIO,
-    canchas: parseDefaultCanchas(),
-  };
+  return null;
 }
 
 async function getDefaultClubSlug() {
@@ -361,7 +318,6 @@ async function getDefaultClubSlug() {
 async function ensureAdminForClub(clubId, now) {
   if (USE_SQLITE) {
     const existing = await dbGet("SELECT id FROM admins WHERE club_id = ? LIMIT 1", [clubId]);
-    // Si ya existe admin, actualizamos los hashes para reflejar el .env actual
     if (existing) {
       const h1 = hashAdminPassword(DEFAULT_ADMIN_PASSWORD);
       const h2 = DEFAULT_ADMIN_PASSWORD_SECOND ? hashAdminPassword(DEFAULT_ADMIN_PASSWORD_SECOND) : null;
@@ -422,7 +378,6 @@ async function seedDefaultClub() {
         [clubId, cancha.nombre, cancha.etiqueta]
       );
     }
-    // Migrar reservas/bloqueos existentes sin club_id
     await dbRun("UPDATE reservas SET club_id = ? WHERE club_id IS NULL", [clubId]);
     await dbRun("UPDATE bloqueos SET club_id = ? WHERE club_id IS NULL", [clubId]);
     await ensureAdminForClub(clubId, now);
@@ -464,38 +419,7 @@ async function seedDefaultClub() {
     await ensureAdminForClub(clubId, now);
     console.log(`[seed] Club "${DEFAULT_CLUB_NOMBRE}" creado en Supabase con slug "${DEFAULT_CLUB_SLUG}"`);
   }
-  // En modo JSON/KV no se persiste; getClubBySlug lo construye desde env en memoria
 }
-
-// ============================================================
-// JSON / KV HELPERS
-// ============================================================
-const RESERVAS_FILE = path.join(DATA_DIR, "reservas.json");
-const BLOQUEOS_FILE = path.join(DATA_DIR, "bloqueos.json");
-
-async function readJsonArrayFile(filePath) {
-  try {
-    const raw = await fs.readFile(filePath, "utf-8");
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    if (error.code === "ENOENT") { await fs.writeFile(filePath, "[]", "utf-8"); return []; }
-    throw error;
-  }
-}
-
-async function writeJsonArrayFile(filePath, data) {
-  await fs.writeFile(filePath, JSON.stringify(data, null, 2), "utf-8");
-}
-
-async function readKvArray(key) {
-  const data = await kv.get(key);
-  return Array.isArray(data) ? data : [];
-}
-async function writeKvArray(key, data) { await kv.set(key, data); }
-
-function kvReservasKey(clubId) { return `reservas:${clubId}`; }
-function kvBloqueosKey(clubId) { return `bloqueos:${clubId}`; }
 
 // ============================================================
 // HELPERS GENERALES
@@ -592,7 +516,7 @@ function mapBloqueoRow(row) {
 }
 
 // ============================================================
-// FUNCIONES DE DATOS (todas reciben clubId)
+// FUNCIONES DE DATOS
 // ============================================================
 async function readReservas({ clubId, fecha = "", cancha = null } = {}) {
   if (USE_SUPABASE) {
@@ -604,23 +528,6 @@ async function readReservas({ clubId, fecha = "", cancha = null } = {}) {
     const { data, error } = await query;
     if (error) throw new Error(error.message);
     return data.map(mapReservaRow);
-  }
-  if (USE_KV) {
-    const reservas = await readKvArray(kvReservasKey(clubId));
-    return reservas.filter((r) => {
-      const fechaOk = fecha ? r.fecha === fecha : true;
-      const canchaOk = cancha ? String(r.cancha) === String(cancha) : true;
-      return fechaOk && canchaOk;
-    });
-  }
-  if (!USE_SQLITE) {
-    const reservas = await readJsonArrayFile(RESERVAS_FILE);
-    return reservas.filter((r) => {
-      const clubOk = clubId != null ? Number(r.clubId ?? r.club_id) === Number(clubId) : true;
-      const fechaOk = fecha ? r.fecha === fecha : true;
-      const canchaOk = cancha ? String(r.cancha) === String(cancha) : true;
-      return clubOk && fechaOk && canchaOk;
-    });
   }
   const where = [];
   const params = [];
@@ -650,20 +557,8 @@ async function purgeExpiredReservas(clubId) {
     if (error) throw new Error(error.message);
     return ids.length;
   }
-  if (USE_KV) {
-    const all = await readKvArray(kvReservasKey(clubId));
-    const idSet = new Set(ids);
-    await writeKvArray(kvReservasKey(clubId), all.filter((r) => !idSet.has(Number(r.id))));
-    return ids.length;
-  }
-  if (USE_SQLITE) {
-    const placeholders = ids.map(() => "?").join(", ");
-    await dbRun(`DELETE FROM reservas WHERE id IN (${placeholders})`, ids);
-    return ids.length;
-  }
-  const all = await readJsonArrayFile(RESERVAS_FILE);
-  const idSet = new Set(ids);
-  await writeJsonArrayFile(RESERVAS_FILE, all.filter((r) => !idSet.has(Number(r.id))));
+  const placeholders = ids.map(() => "?").join(", ");
+  await dbRun(`DELETE FROM reservas WHERE id IN (${placeholders})`, ids);
   return ids.length;
 }
 
@@ -676,23 +571,6 @@ async function readBloqueos({ clubId, fecha = "", cancha = null } = {}) {
     const { data, error } = await query;
     if (error) throw new Error(error.message);
     return data.map(mapBloqueoRow);
-  }
-  if (USE_KV) {
-    const bloqueos = await readKvArray(kvBloqueosKey(clubId));
-    return bloqueos.map((b) => ({ ...b, diaCompleto: Boolean(b.diaCompleto) })).filter((b) => {
-      const fechaOk = fecha ? b.fecha === fecha : true;
-      const canchaOk = cancha ? String(b.cancha) === String(cancha) : true;
-      return fechaOk && canchaOk;
-    });
-  }
-  if (!USE_SQLITE) {
-    const bloqueos = await readJsonArrayFile(BLOQUEOS_FILE);
-    return bloqueos.map((b) => ({ ...b, diaCompleto: Boolean(b.diaCompleto) })).filter((b) => {
-      const clubOk = clubId != null ? Number(b.clubId ?? b.club_id) === Number(clubId) : true;
-      const fechaOk = fecha ? b.fecha === fecha : true;
-      const canchaOk = cancha ? String(b.cancha) === String(cancha) : true;
-      return clubOk && fechaOk && canchaOk;
-    });
   }
   const where = [];
   const params = [];
@@ -871,16 +749,7 @@ app.post("/api/:slug/reservas", resolveClub, upload.single("comprobante"), async
       }).select().single();
       if (insertError) throw new Error(insertError.message);
       reservaId = insertData.id;
-    } else if (USE_KV) {
-      comprobanteArchivo = req.file.filename;
-      comprobanteUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
-      const all = await readKvArray(kvReservasKey(clubId));
-      reservaId = all.reduce((max, r) => Math.max(max, Number(r.id) || 0), 0) + 1;
-      all.push({ id: reservaId, clubId, nombre, telefono, cancha, fecha, horario,
-        comprobante: { nombreOriginal: req.file.originalname, archivo: req.file.filename,
-          mimetype: req.file.mimetype, size: req.file.size }, creadoEn });
-      await writeKvArray(kvReservasKey(clubId), all);
-    } else if (USE_SQLITE) {
+    } else {
       comprobanteArchivo = req.file.filename;
       comprobanteUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
       const insertResult = await dbRun(
@@ -893,15 +762,6 @@ app.post("/api/:slug/reservas", resolveClub, upload.single("comprobante"), async
          req.file.originalname, req.file.filename, req.file.mimetype, req.file.size, creadoEn]
       );
       reservaId = insertResult.lastID;
-    } else {
-      comprobanteArchivo = req.file.filename;
-      comprobanteUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
-      const all = await readJsonArrayFile(RESERVAS_FILE);
-      reservaId = all.reduce((max, r) => Math.max(max, Number(r.id) || 0), 0) + 1;
-      all.push({ id: reservaId, clubId, nombre, telefono, cancha, fecha, horario,
-        comprobante: { nombreOriginal: req.file.originalname, archivo: req.file.filename,
-          mimetype: req.file.mimetype, size: req.file.size }, creadoEn });
-      await writeJsonArrayFile(RESERVAS_FILE, all);
     }
 
     return res.status(201).json({
@@ -940,16 +800,10 @@ app.delete("/api/:slug/admin/reservas/:id", resolveClub, requireAdmin, async (re
       await supabase.storage.from(SUPABASE_BUCKET).remove([eliminada.comprobante.archivo]);
       const { error } = await supabase.from("reservas").delete().eq("id", id);
       if (error) throw new Error(error.message);
-    } else if (USE_KV) {
-      const all = await readKvArray(kvReservasKey(clubId));
-      await writeKvArray(kvReservasKey(clubId), all.filter((r) => Number(r.id) !== id));
-    } else if (USE_SQLITE) {
+    } else {
       await dbRun("DELETE FROM reservas WHERE id = ?", [id]);
       const filePath = path.join(UPLOADS_DIR, eliminada.comprobante.archivo);
       fs.unlink(filePath).catch(() => {});
-    } else {
-      const all = await readJsonArrayFile(RESERVAS_FILE);
-      await writeJsonArrayFile(RESERVAS_FILE, all.filter((r) => Number(r.id) !== id));
     }
     return res.json({ ok: true, reserva: eliminada });
   } catch (error) { next(error); }
@@ -1015,14 +869,7 @@ app.post("/api/:slug/admin/bloqueos", resolveClub, requireAdmin, async (req, res
       }).select().single();
       if (insertError) throw new Error(insertError.message);
       bloqueoId = insertData.id;
-    } else if (USE_KV) {
-      const all = await readKvArray(kvBloqueosKey(clubId));
-      bloqueoId = all.reduce((max, b) => Math.max(max, Number(b.id) || 0), 0) + 1;
-      all.push({ id: bloqueoId, clubId, cancha, fecha, horario: nuevoBloqueo.horario,
-        horarioDesde: nuevoBloqueo.horarioDesde, horarioHasta: nuevoBloqueo.horarioHasta,
-        diaCompleto, motivo, creadoEn });
-      await writeKvArray(kvBloqueosKey(clubId), all);
-    } else if (USE_SQLITE) {
+    } else {
       const insertResult = await dbRun(
         `INSERT INTO bloqueos
           (club_id, cancha, fecha, horario, horario_desde, horario_hasta, dia_completo, motivo, creado_en)
@@ -1031,13 +878,6 @@ app.post("/api/:slug/admin/bloqueos", resolveClub, requireAdmin, async (req, res
          nuevoBloqueo.horarioHasta, diaCompleto ? 1 : 0, motivo, creadoEn]
       );
       bloqueoId = insertResult.lastID;
-    } else {
-      const all = await readJsonArrayFile(BLOQUEOS_FILE);
-      bloqueoId = all.reduce((max, b) => Math.max(max, Number(b.id) || 0), 0) + 1;
-      all.push({ id: bloqueoId, clubId, cancha, fecha, horario: nuevoBloqueo.horario,
-        horarioDesde: nuevoBloqueo.horarioDesde, horarioHasta: nuevoBloqueo.horarioHasta,
-        diaCompleto, motivo, creadoEn });
-      await writeJsonArrayFile(BLOQUEOS_FILE, all);
     }
 
     return res.status(201).json({
@@ -1061,14 +901,8 @@ app.delete("/api/:slug/admin/bloqueos/:id", resolveClub, requireAdmin, async (re
     if (USE_SUPABASE) {
       const { error } = await supabase.from("bloqueos").delete().eq("id", id);
       if (error) throw new Error(error.message);
-    } else if (USE_KV) {
-      const all = await readKvArray(kvBloqueosKey(clubId));
-      await writeKvArray(kvBloqueosKey(clubId), all.filter((b) => Number(b.id) !== id));
-    } else if (USE_SQLITE) {
-      await dbRun("DELETE FROM bloqueos WHERE id = ?", [id]);
     } else {
-      const all = await readJsonArrayFile(BLOQUEOS_FILE);
-      await writeJsonArrayFile(BLOQUEOS_FILE, all.filter((b) => Number(b.id) !== id));
+      await dbRun("DELETE FROM bloqueos WHERE id = ?", [id]);
     }
     return res.json({ ok: true, bloqueo: eliminado });
   } catch (error) { next(error); }
@@ -1077,25 +911,19 @@ app.delete("/api/:slug/admin/bloqueos/:id", resolveClub, requireAdmin, async (re
 // ============================================================
 // RUTAS ADMIN: CONFIGURACION DEL CLUB
 // ============================================================
-
-// GET canchas del club (incluye inactivas para gestión)
 app.get("/api/:slug/admin/canchas", resolveClub, requireAdmin, async (req, res, next) => {
   try {
     const clubId = req.club.id;
-    if (USE_SQLITE) {
-      const rows = await dbAll("SELECT * FROM canchas WHERE club_id = ? ORDER BY id ASC", [clubId]);
-      return res.json(rows.map((r) => ({ id: r.id, nombre: r.nombre, etiqueta: r.etiqueta, activa: Boolean(r.activa) })));
-    }
     if (USE_SUPABASE) {
       const { data, error } = await supabase.from("canchas").select("*").eq("club_id", clubId).order("id");
       if (error) throw new Error(error.message);
       return res.json((data || []).map((r) => ({ id: r.id, nombre: r.nombre, etiqueta: r.etiqueta, activa: r.activa })));
     }
-    return res.json(req.club.canchas.map((c, i) => ({ id: i, nombre: c.nombre, etiqueta: c.etiqueta, activa: true })));
+    const rows = await dbAll("SELECT * FROM canchas WHERE club_id = ? ORDER BY id ASC", [clubId]);
+    return res.json(rows.map((r) => ({ id: r.id, nombre: r.nombre, etiqueta: r.etiqueta, activa: Boolean(r.activa) })));
   } catch (error) { next(error); }
 });
 
-// POST nueva cancha
 app.post("/api/:slug/admin/canchas", resolveClub, requireAdmin, async (req, res, next) => {
   try {
     const clubId = req.club.id;
@@ -1104,25 +932,21 @@ app.post("/api/:slug/admin/canchas", resolveClub, requireAdmin, async (req, res,
     if (!nombre) return res.status(400).json({ error: "El nombre de la cancha es obligatorio." });
     if (!etiqueta) return res.status(400).json({ error: "La etiqueta de la cancha es obligatoria." });
 
-    if (USE_SQLITE) {
-      const result = await dbRun(
-        "INSERT OR IGNORE INTO canchas (club_id, nombre, etiqueta, activa) VALUES (?, ?, ?, 1)",
-        [clubId, nombre, etiqueta]
-      );
-      if (!result.lastID) return res.status(409).json({ error: "Ya existe una cancha con ese nombre." });
-      return res.json({ id: result.lastID, nombre, etiqueta, activa: true });
-    }
     if (USE_SUPABASE) {
       const { data, error } = await supabase.from("canchas")
         .insert({ club_id: clubId, nombre, etiqueta, activa: true }).select().single();
       if (error) return res.status(409).json({ error: "Ya existe una cancha con ese nombre." });
       return res.json({ id: data.id, nombre: data.nombre, etiqueta: data.etiqueta, activa: data.activa });
     }
-    return res.status(400).json({ error: "Gestión de canchas no disponible en modo JSON/KV." });
+    const result = await dbRun(
+      "INSERT OR IGNORE INTO canchas (club_id, nombre, etiqueta, activa) VALUES (?, ?, ?, 1)",
+      [clubId, nombre, etiqueta]
+    );
+    if (!result.lastID) return res.status(409).json({ error: "Ya existe una cancha con ese nombre." });
+    return res.json({ id: result.lastID, nombre, etiqueta, activa: true });
   } catch (error) { next(error); }
 });
 
-// PUT editar etiqueta de una cancha
 app.put("/api/:slug/admin/canchas/:id", resolveClub, requireAdmin, async (req, res, next) => {
   try {
     const clubId = req.club.id;
@@ -1130,37 +954,22 @@ app.put("/api/:slug/admin/canchas/:id", resolveClub, requireAdmin, async (req, r
     const etiqueta = (req.body?.etiqueta || "").trim();
     if (!etiqueta) return res.status(400).json({ error: "La etiqueta es obligatoria." });
 
-    if (USE_SQLITE) {
-      await dbRun("UPDATE canchas SET etiqueta = ? WHERE id = ? AND club_id = ?", [etiqueta, id, clubId]);
-      return res.json({ ok: true });
-    }
     if (USE_SUPABASE) {
       const { error } = await supabase.from("canchas").update({ etiqueta }).eq("id", id).eq("club_id", clubId);
       if (error) throw new Error(error.message);
       return res.json({ ok: true });
     }
-    return res.status(400).json({ error: "No disponible en modo JSON/KV." });
+    await dbRun("UPDATE canchas SET etiqueta = ? WHERE id = ? AND club_id = ?", [etiqueta, id, clubId]);
+    return res.json({ ok: true });
   } catch (error) { next(error); }
 });
 
-// DELETE cancha (solo si no tiene reservas futuras)
 app.delete("/api/:slug/admin/canchas/:id", resolveClub, requireAdmin, async (req, res, next) => {
   try {
     const clubId = req.club.id;
     const id = Number(req.params.id);
     const hoy = new Date().toISOString().split("T")[0];
 
-    if (USE_SQLITE) {
-      const cancha = await dbGet("SELECT * FROM canchas WHERE id = ? AND club_id = ?", [id, clubId]);
-      if (!cancha) return res.status(404).json({ error: "Cancha no encontrada." });
-      const futuras = await dbAll(
-        "SELECT id FROM reservas WHERE club_id = ? AND cancha = ? AND fecha >= ?",
-        [clubId, cancha.nombre, hoy]
-      );
-      if (futuras.length) return res.status(409).json({ error: `La cancha tiene ${futuras.length} reserva(s) futura(s). Cancelalas primero.` });
-      await dbRun("DELETE FROM canchas WHERE id = ? AND club_id = ?", [id, clubId]);
-      return res.json({ ok: true });
-    }
     if (USE_SUPABASE) {
       const { data: cancha } = await supabase.from("canchas").select("*").eq("id", id).eq("club_id", clubId).maybeSingle();
       if (!cancha) return res.status(404).json({ error: "Cancha no encontrada." });
@@ -1170,11 +979,18 @@ app.delete("/api/:slug/admin/canchas/:id", resolveClub, requireAdmin, async (req
       await supabase.from("canchas").delete().eq("id", id).eq("club_id", clubId);
       return res.json({ ok: true });
     }
-    return res.status(400).json({ error: "No disponible en modo JSON/KV." });
+    const cancha = await dbGet("SELECT * FROM canchas WHERE id = ? AND club_id = ?", [id, clubId]);
+    if (!cancha) return res.status(404).json({ error: "Cancha no encontrada." });
+    const futuras = await dbAll(
+      "SELECT id FROM reservas WHERE club_id = ? AND cancha = ? AND fecha >= ?",
+      [clubId, cancha.nombre, hoy]
+    );
+    if (futuras.length) return res.status(409).json({ error: `La cancha tiene ${futuras.length} reserva(s) futura(s). Cancelalas primero.` });
+    await dbRun("DELETE FROM canchas WHERE id = ? AND club_id = ?", [id, clubId]);
+    return res.json({ ok: true });
   } catch (error) { next(error); }
 });
 
-// PATCH editar configuración general del club
 app.patch("/api/:slug/admin/club", resolveClub, requireAdmin, async (req, res, next) => {
   try {
     const clubId = req.club.id;
@@ -1195,14 +1011,6 @@ app.patch("/api/:slug/admin/club", resolveClub, requireAdmin, async (req, res, n
     }
     if (horaInicio < 0 || horaFin > 23) return res.status(400).json({ error: "Horario fuera de rango (0-23)." });
 
-    if (USE_SQLITE) {
-      await dbRun(
-        `UPDATE clubs SET nombre=?, whatsapp=?, transfer_alias=?, transfer_cbu=?, transfer_titular=?,
-         hora_inicio=?, hora_fin=?, precio=? WHERE id=?`,
-        [nombre, whatsapp, transferAlias, transferCbu, transferTitular, horaInicio, horaFin, precio, clubId]
-      );
-      return res.json({ ok: true });
-    }
     if (USE_SUPABASE) {
       const { error } = await supabase.from("clubs").update({
         nombre, whatsapp, transfer_alias: transferAlias, transfer_cbu: transferCbu,
@@ -1211,11 +1019,15 @@ app.patch("/api/:slug/admin/club", resolveClub, requireAdmin, async (req, res, n
       if (error) throw new Error(error.message);
       return res.json({ ok: true });
     }
-    return res.status(400).json({ error: "No disponible en modo JSON/KV." });
+    await dbRun(
+      `UPDATE clubs SET nombre=?, whatsapp=?, transfer_alias=?, transfer_cbu=?, transfer_titular=?,
+       hora_inicio=?, hora_fin=?, precio=? WHERE id=?`,
+      [nombre, whatsapp, transferAlias, transferCbu, transferTitular, horaInicio, horaFin, precio, clubId]
+    );
+    return res.json({ ok: true });
   } catch (error) { next(error); }
 });
 
-// POST cambiar contraseña admin
 app.post("/api/:slug/admin/password", resolveClub, requireAdmin, async (req, res, next) => {
   try {
     const clubId = req.club.id;
@@ -1231,13 +1043,6 @@ app.post("/api/:slug/admin/password", resolveClub, requireAdmin, async (req, res
     const { salt, hash } = hashAdminPassword(passwordNuevo);
     const now = new Date().toISOString();
 
-    if (USE_SQLITE) {
-      await dbRun(
-        "UPDATE admins SET password_salt=?, password_hash=?, password_salt_b=NULL, password_hash_b=NULL, actualizado_en=? WHERE club_id=?",
-        [salt, hash, now, clubId]
-      );
-      return res.json({ ok: true });
-    }
     if (USE_SUPABASE) {
       const { error } = await supabase.from("admins").update({
         password_salt: salt, password_hash: hash,
@@ -1246,7 +1051,11 @@ app.post("/api/:slug/admin/password", resolveClub, requireAdmin, async (req, res
       if (error) throw new Error(error.message);
       return res.json({ ok: true });
     }
-    return res.status(400).json({ error: "No disponible en modo JSON/KV." });
+    await dbRun(
+      "UPDATE admins SET password_salt=?, password_hash=?, password_salt_b=NULL, password_hash_b=NULL, actualizado_en=? WHERE club_id=?",
+      [salt, hash, now, clubId]
+    );
+    return res.json({ ok: true });
   } catch (error) { next(error); }
 });
 
@@ -1260,7 +1069,6 @@ app.get("/", async (_req, res) => {
   } catch (_) { res.redirect(`/${DEFAULT_CLUB_SLUG}`); }
 });
 
-// Sirve index.html para cualquier slug valido (archivos estaticos ya fueron servidos antes)
 app.get("/:slug", async (req, res, next) => {
   if (req.params.slug.includes(".")) return next();
   try {
