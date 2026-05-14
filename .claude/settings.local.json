@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\DELL\\\\Desktop\\\\Lucas\\\\CMR\\\\Reservas_Canchas\\\\Turnos-Club\" -Force)",
+      "Bash(Select-Object -Property Mode, Name)",
+      "Bash(Format-Table -AutoSize)",
+      "Bash(node -e \"require\\('./server/index.js'\\)\")",
+      "Bash(npm install *)"
+    ]
+  }
+}
