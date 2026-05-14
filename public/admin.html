@@ -74,7 +74,15 @@
         </section>
 
         <section class="mb-4 rounded-xl bg-white p-4 shadow-sm">
-          <h2 class="mb-3 text-xl font-semibold">Turnos reservados</h2>
+          <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <h2 class="text-xl font-semibold">Turnos reservados</h2>
+            <div class="flex items-center gap-2">
+              <label class="text-sm font-medium text-slate-600" for="filtroFecha">Fecha</label>
+              <input id="filtroFecha" type="date" class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
+              <button id="btnFiltrarReservas" class="rounded-lg bg-slate-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-slate-800" type="button">Filtrar</button>
+              <button id="btnLimpiarFiltro" class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-100" type="button">Todas</button>
+            </div>
+          </div>
           <div id="reservasList" class="grid gap-3"></div>
         </section>
 

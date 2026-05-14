@@ -127,14 +127,30 @@ function describeBloqueoHorario(bloqueo) {
   return `Horario ${bloqueo.horario}`;
 }
 
+const filtroFecha = document.getElementById("filtroFecha");
+const btnFiltrarReservas = document.getElementById("btnFiltrarReservas");
+const btnLimpiarFiltro = document.getElementById("btnLimpiarFiltro");
+
+async function loadReservasAdmin(fecha = "") {
+  const qs = fecha ? `?fecha=${encodeURIComponent(fecha)}` : "";
+  const reservas = await api(`/api/${CLUB_SLUG}/admin/reservas${qs}`);
+  renderReservas(reservas);
+}
+
 async function refreshAdminData() {
-  const [reservas, bloqueos] = await Promise.all([
-    api(`/api/${CLUB_SLUG}/admin/reservas`),
+  const [, bloqueos] = await Promise.all([
+    loadReservasAdmin(filtroFecha.value),
     api(`/api/${CLUB_SLUG}/admin/bloqueos`),
   ]);
-  renderReservas(reservas);
   renderBloqueos(bloqueos);
 }
+
+btnFiltrarReservas.addEventListener("click", () => loadReservasAdmin(filtroFecha.value));
+
+btnLimpiarFiltro.addEventListener("click", () => {
+  filtroFecha.value = "";
+  loadReservasAdmin("");
+});
 
 function setAuthenticatedUI(isAuth) {
   loginCard.classList.toggle("hidden", isAuth);

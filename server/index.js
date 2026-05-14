@@ -361,7 +361,16 @@ async function getDefaultClubSlug() {
 async function ensureAdminForClub(clubId, now) {
   if (USE_SQLITE) {
     const existing = await dbGet("SELECT id FROM admins WHERE club_id = ? LIMIT 1", [clubId]);
-    if (existing) return;
+    // Si ya existe admin, actualizamos los hashes para reflejar el .env actual
+    if (existing) {
+      const h1 = hashAdminPassword(DEFAULT_ADMIN_PASSWORD);
+      const h2 = DEFAULT_ADMIN_PASSWORD_SECOND ? hashAdminPassword(DEFAULT_ADMIN_PASSWORD_SECOND) : null;
+      await dbRun(
+        "UPDATE admins SET password_salt=?, password_hash=?, password_salt_b=?, password_hash_b=?, actualizado_en=? WHERE club_id=?",
+        [h1.salt, h1.hash, h2 ? h2.salt : null, h2 ? h2.hash : null, now, clubId]
+      );
+      return;
+    }
     const h1 = hashAdminPassword(DEFAULT_ADMIN_PASSWORD);
     const h2 = DEFAULT_ADMIN_PASSWORD_SECOND ? hashAdminPassword(DEFAULT_ADMIN_PASSWORD_SECOND) : null;
     await dbRun(
@@ -907,7 +916,8 @@ app.post("/api/:slug/reservas", resolveClub, upload.single("comprobante"), async
 app.get("/api/:slug/admin/reservas", resolveClub, requireAdmin, async (req, res, next) => {
   try {
     await purgeExpiredReservas(req.club.id);
-    const reservas = await readReservas({ clubId: req.club.id });
+    const fecha = (req.query.fecha || "").trim();
+    const reservas = await readReservas({ clubId: req.club.id, fecha: fecha || undefined });
     const reservasConLink = reservas.map((r) => ({
       ...r,
       comprobanteUrl: USE_SUPABASE
@@ -935,6 +945,8 @@ app.delete("/api/:slug/admin/reservas/:id", resolveClub, requireAdmin, async (re
       await writeKvArray(kvReservasKey(clubId), all.filter((r) => Number(r.id) !== id));
     } else if (USE_SQLITE) {
       await dbRun("DELETE FROM reservas WHERE id = ?", [id]);
+      const filePath = path.join(UPLOADS_DIR, eliminada.comprobante.archivo);
+      fs.unlink(filePath).catch(() => {});
     } else {
       const all = await readJsonArrayFile(RESERVAS_FILE);
       await writeJsonArrayFile(RESERVAS_FILE, all.filter((r) => Number(r.id) !== id));
