@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Turnos Club</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-slate-100">
+
+  <header class="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold text-slate-800">Turnos Club</h1>
+      <p class="text-sm text-slate-500">Reserva tu cancha en pocos pasos</p>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-4xl px-4 py-10">
+
+    <div id="loading" class="text-center text-slate-500 py-16">Cargando clubs...</div>
+
+    <div id="emptyState" class="hidden text-center py-16">
+      <p class="text-slate-500 text-lg">No hay clubs disponibles aún.</p>
+    </div>
+
+    <div id="clubsGrid" class="hidden grid gap-5 sm:grid-cols-2 lg:grid-cols-3"></div>
+
+  </main>
+
+  <script src="/home.js"></script>
+</body>
+</html>

@@ -87,6 +87,16 @@ function getCanchaEtiqueta(nombreCancha) {
   return found ? found.etiqueta : `Cancha ${nombreCancha}`;
 }
 
+function whatsappHref(r) {
+  const telefono = r.telefono.replace(/\D/g, "");
+  const canchaLabel = getCanchaEtiqueta(r.cancha);
+  const fecha = formatFecha(r.fecha);
+  const texto = encodeURIComponent(
+    `Hola ${r.nombre}, te contactamos sobre tu reserva en ${canchaLabel} el ${fecha} a las ${r.horario}hs.`
+  );
+  return `https://wa.me/${telefono}?text=${texto}`;
+}
+
 function estadoBadge(estado) {
   const estilos = {
     pendiente: "bg-amber-100 text-amber-800",
@@ -122,6 +132,10 @@ function renderReservas(reservas) {
                data-action="confirmar" data-id="${r.id}" type="button">Confirmar</button>`
           : `<button class="rounded-lg bg-slate-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-slate-600"
                data-action="revertir" data-id="${r.id}" type="button">Marcar pendiente</button>`}
+        <a href="${whatsappHref(r)}" target="_blank" rel="noopener noreferrer"
+           class="rounded-lg bg-green-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-green-700">
+          WhatsApp
+        </a>
         <button class="rounded-lg bg-red-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-800"
           data-action="cancelar" data-id="${r.id}" type="button">Cancelar turno</button>
       </div>

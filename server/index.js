@@ -46,6 +46,7 @@ const DEFAULT_CLUB_CBU = process.env.TRANSFER_CBU || "0000000000000000000000";
 const DEFAULT_CLUB_TITULAR = process.env.TRANSFER_TITULAR || "Nombre Club";
 const DEFAULT_ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
 const DEFAULT_ADMIN_PASSWORD_SECOND = process.env.ADMIN_PASSWORD_SECOND || "";
+const SUPERADMIN_PASSWORD = process.env.SUPERADMIN_PASSWORD || "";
 
 function parseDefaultCanchas() {
   const nombres = (process.env.CLUB_CANCHAS || "11,7").split(",").map((s) => s.trim()).filter(Boolean);
@@ -253,6 +254,16 @@ function requireAdmin(req, res, next) {
   const [, token] = auth.split(" ");
   const parsed = parseAdminToken(token);
   if (!parsed || parsed.clubId !== req.club.id) {
+    return res.status(401).json({ error: "No autorizado." });
+  }
+  return next();
+}
+
+function requireSuperAdmin(req, res, next) {
+  const auth = req.headers.authorization || "";
+  const [, token] = auth.split(" ");
+  const parsed = parseAdminToken(token);
+  if (!parsed || parsed.clubId !== 0) {
     return res.status(401).json({ error: "No autorizado." });
   }
   return next();
@@ -1089,13 +1100,111 @@ app.patch("/api/:slug/admin/reservas/:id/estado", resolveClub, requireAdmin, asy
 });
 
 // ============================================================
+// SUPERADMIN  /api/superadmin/...  y  /api/clubs
+// ============================================================
+app.get("/api/clubs", async (_req, res, next) => {
+  try {
+    if (USE_SQLITE) {
+      const rows = await dbAll("SELECT slug, nombre, logo_url FROM clubs WHERE activo = 1 ORDER BY id ASC");
+      return res.json(rows.map((r) => ({ slug: r.slug, nombre: r.nombre, logoUrl: r.logo_url || null })));
+    }
+    if (USE_SUPABASE) {
+      const { data, error } = await supabase.from("clubs").select("slug, nombre, logo_url").eq("activo", true).order("id");
+      if (error) throw new Error(error.message);
+      return res.json((data || []).map((r) => ({ slug: r.slug, nombre: r.nombre, logoUrl: r.logo_url || null })));
+    }
+    return res.json([]);
+  } catch (error) { next(error); }
+});
+
+app.post("/api/superadmin/login", async (req, res, next) => {
+  try {
+    if (!SUPERADMIN_PASSWORD) {
+      return res.status(503).json({ error: "Super-admin no habilitado en este servidor. Configurá SUPERADMIN_PASSWORD en .env" });
+    }
+    const password = (req.body?.password || "").trim();
+    if (!password || password !== SUPERADMIN_PASSWORD) {
+      return res.status(401).json({ error: "Clave incorrecta." });
+    }
+    const token = createAdminSession(0);
+    return res.json({ token, expiresInMs: ADMIN_SESSION_TTL_MS });
+  } catch (error) { next(error); }
+});
+
+app.get("/api/superadmin/clubs", requireSuperAdmin, async (_req, res, next) => {
+  try {
+    if (USE_SQLITE) {
+      const rows = await dbAll("SELECT id, slug, nombre, activo, creado_en FROM clubs ORDER BY id ASC");
+      return res.json(rows);
+    }
+    if (USE_SUPABASE) {
+      const { data, error } = await supabase.from("clubs").select("id, slug, nombre, activo, creado_en").order("id");
+      if (error) throw new Error(error.message);
+      return res.json(data || []);
+    }
+    return res.json([]);
+  } catch (error) { next(error); }
+});
+
+app.post("/api/superadmin/clubs", requireSuperAdmin, async (req, res, next) => {
+  try {
+    const nombre = (req.body?.nombre || "").trim();
+    const rawSlug = (req.body?.slug || "").trim().toLowerCase().replace(/[^a-z0-9-]/g, "-");
+    const password = (req.body?.password || "").trim();
+
+    if (!nombre || !rawSlug || !password) {
+      return res.status(400).json({ error: "nombre, slug y password son requeridos." });
+    }
+    if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(rawSlug) || rawSlug.length < 2) {
+      return res.status(400).json({ error: "Slug inválido. Usá letras minúsculas, números y guiones." });
+    }
+
+    const now = new Date().toISOString();
+    const { salt, hash } = hashAdminPassword(password);
+
+    if (USE_SQLITE) {
+      const existing = await dbGet("SELECT id FROM clubs WHERE slug = ? LIMIT 1", [rawSlug]);
+      if (existing) return res.status(409).json({ error: `Ya existe un club con el slug "${rawSlug}".` });
+      const result = await dbRun(
+        `INSERT INTO clubs (slug, nombre, deporte, whatsapp, transfer_alias, transfer_cbu, transfer_titular,
+          hora_inicio, hora_fin, precio, activo, creado_en)
+         VALUES (?, ?, 'futbol', '', '', '', '', 10, 23, '0', 1, ?)`,
+        [rawSlug, nombre, now]
+      );
+      await dbRun(
+        "INSERT INTO admins (club_id, password_salt, password_hash, actualizado_en) VALUES (?, ?, ?, ?)",
+        [result.lastID, salt, hash, now]
+      );
+      return res.status(201).json({ ok: true, slug: rawSlug, nombre });
+    }
+    if (USE_SUPABASE) {
+      const { data: existing } = await supabase.from("clubs").select("id").eq("slug", rawSlug).maybeSingle();
+      if (existing) return res.status(409).json({ error: `Ya existe un club con el slug "${rawSlug}".` });
+      const { data: club, error: clubErr } = await supabase.from("clubs").insert({
+        slug: rawSlug, nombre, deporte: "futbol", whatsapp: "", transfer_alias: "", transfer_cbu: "",
+        transfer_titular: "", hora_inicio: 10, hora_fin: 23, precio: "0", activo: true, creado_en: now,
+      }).select().single();
+      if (clubErr) throw new Error(clubErr.message);
+      const { error: adminErr } = await supabase.from("admins").insert({
+        club_id: club.id, password_salt: salt, password_hash: hash,
+        password_salt_b: null, password_hash_b: null, actualizado_en: now,
+      });
+      if (adminErr) throw new Error(adminErr.message);
+      return res.status(201).json({ ok: true, slug: rawSlug, nombre });
+    }
+    return res.status(503).json({ error: "No hay backend de datos disponible." });
+  } catch (error) { next(error); }
+});
+
+// ============================================================
 // RUTAS DE PAGINAS  /:slug  y  /:slug/admin
 // ============================================================
-app.get("/", async (_req, res) => {
-  try {
-    const slug = await getDefaultClubSlug();
-    res.redirect(`/${slug}`);
-  } catch (_) { res.redirect(`/${DEFAULT_CLUB_SLUG}`); }
+app.get("/", (_req, res) => {
+  res.sendFile(path.join(ROOT_DIR, "public", "home.html"));
+});
+
+app.get("/superadmin", (_req, res) => {
+  res.sendFile(path.join(ROOT_DIR, "public", "superadmin.html"));
 });
 
 app.get("/:slug", async (req, res, next) => {
