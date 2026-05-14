@@ -57,8 +57,10 @@ function parseDefaultCanchas() {
   }));
 }
 
+const LOGOS_DIR = path.join(UPLOADS_DIR, "logos");
 if (!fsSync.existsSync(DATA_DIR)) fsSync.mkdirSync(DATA_DIR, { recursive: true });
 if (!fsSync.existsSync(UPLOADS_DIR)) fsSync.mkdirSync(UPLOADS_DIR, { recursive: true });
+if (!fsSync.existsSync(LOGOS_DIR)) fsSync.mkdirSync(LOGOS_DIR, { recursive: true });
 
 const db = USE_SQLITE ? new sqlite3.Database(DB_FILE) : null;
 
@@ -644,6 +646,15 @@ const upload = multer({
   },
 });
 
+const logoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 2 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith("image/")) return cb(null, true);
+    cb(new Error("Solo se permiten imágenes."));
+  },
+});
+
 app.use(express.json());
 app.use("/uploads", express.static(UPLOADS_DIR));
 app.use(express.static(path.join(ROOT_DIR, "public")));
@@ -1193,6 +1204,35 @@ app.post("/api/superadmin/clubs", requireSuperAdmin, async (req, res, next) => {
       return res.status(201).json({ ok: true, slug: rawSlug, nombre });
     }
     return res.status(503).json({ error: "No hay backend de datos disponible." });
+  } catch (error) { next(error); }
+});
+
+app.patch("/api/superadmin/clubs/:id/logo", requireSuperAdmin, logoUpload.single("logo"), async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!req.file) return res.status(400).json({ error: "No se recibió imagen." });
+
+    const ext = path.extname(req.file.originalname) || ".jpg";
+    const filename = `${id}_${Date.now()}${ext}`;
+
+    if (USE_SQLITE) {
+      await fs.writeFile(path.join(LOGOS_DIR, filename), req.file.buffer);
+      const logoUrl = `/uploads/logos/${filename}`;
+      await dbRun("UPDATE clubs SET logo_url = ? WHERE id = ?", [logoUrl, id]);
+      return res.json({ ok: true, logoUrl });
+    }
+    if (USE_SUPABASE) {
+      const storagePath = `logos/${filename}`;
+      const { error: uploadErr } = await supabase.storage
+        .from(SUPABASE_BUCKET).upload(storagePath, req.file.buffer, {
+          contentType: req.file.mimetype, upsert: true,
+        });
+      if (uploadErr) throw new Error(uploadErr.message);
+      const { data: { publicUrl } } = supabase.storage.from(SUPABASE_BUCKET).getPublicUrl(storagePath);
+      await supabase.from("clubs").update({ logo_url: publicUrl }).eq("id", id);
+      return res.json({ ok: true, logoUrl: publicUrl });
+    }
+    return res.status(503).json({ error: "No hay backend disponible." });
   } catch (error) { next(error); }
 });
 
