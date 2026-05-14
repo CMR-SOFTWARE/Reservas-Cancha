@@ -1063,6 +1063,182 @@ app.delete("/api/:slug/admin/bloqueos/:id", resolveClub, requireAdmin, async (re
 });
 
 // ============================================================
+// RUTAS ADMIN: CONFIGURACION DEL CLUB
+// ============================================================
+
+// GET canchas del club (incluye inactivas para gestión)
+app.get("/api/:slug/admin/canchas", resolveClub, requireAdmin, async (req, res, next) => {
+  try {
+    const clubId = req.club.id;
+    if (USE_SQLITE) {
+      const rows = await dbAll("SELECT * FROM canchas WHERE club_id = ? ORDER BY id ASC", [clubId]);
+      return res.json(rows.map((r) => ({ id: r.id, nombre: r.nombre, etiqueta: r.etiqueta, activa: Boolean(r.activa) })));
+    }
+    if (USE_SUPABASE) {
+      const { data, error } = await supabase.from("canchas").select("*").eq("club_id", clubId).order("id");
+      if (error) throw new Error(error.message);
+      return res.json((data || []).map((r) => ({ id: r.id, nombre: r.nombre, etiqueta: r.etiqueta, activa: r.activa })));
+    }
+    return res.json(req.club.canchas.map((c, i) => ({ id: i, nombre: c.nombre, etiqueta: c.etiqueta, activa: true })));
+  } catch (error) { next(error); }
+});
+
+// POST nueva cancha
+app.post("/api/:slug/admin/canchas", resolveClub, requireAdmin, async (req, res, next) => {
+  try {
+    const clubId = req.club.id;
+    const nombre = (req.body?.nombre || "").trim();
+    const etiqueta = (req.body?.etiqueta || "").trim();
+    if (!nombre) return res.status(400).json({ error: "El nombre de la cancha es obligatorio." });
+    if (!etiqueta) return res.status(400).json({ error: "La etiqueta de la cancha es obligatoria." });
+
+    if (USE_SQLITE) {
+      const result = await dbRun(
+        "INSERT OR IGNORE INTO canchas (club_id, nombre, etiqueta, activa) VALUES (?, ?, ?, 1)",
+        [clubId, nombre, etiqueta]
+      );
+      if (!result.lastID) return res.status(409).json({ error: "Ya existe una cancha con ese nombre." });
+      return res.json({ id: result.lastID, nombre, etiqueta, activa: true });
+    }
+    if (USE_SUPABASE) {
+      const { data, error } = await supabase.from("canchas")
+        .insert({ club_id: clubId, nombre, etiqueta, activa: true }).select().single();
+      if (error) return res.status(409).json({ error: "Ya existe una cancha con ese nombre." });
+      return res.json({ id: data.id, nombre: data.nombre, etiqueta: data.etiqueta, activa: data.activa });
+    }
+    return res.status(400).json({ error: "Gestión de canchas no disponible en modo JSON/KV." });
+  } catch (error) { next(error); }
+});
+
+// PUT editar etiqueta de una cancha
+app.put("/api/:slug/admin/canchas/:id", resolveClub, requireAdmin, async (req, res, next) => {
+  try {
+    const clubId = req.club.id;
+    const id = Number(req.params.id);
+    const etiqueta = (req.body?.etiqueta || "").trim();
+    if (!etiqueta) return res.status(400).json({ error: "La etiqueta es obligatoria." });
+
+    if (USE_SQLITE) {
+      await dbRun("UPDATE canchas SET etiqueta = ? WHERE id = ? AND club_id = ?", [etiqueta, id, clubId]);
+      return res.json({ ok: true });
+    }
+    if (USE_SUPABASE) {
+      const { error } = await supabase.from("canchas").update({ etiqueta }).eq("id", id).eq("club_id", clubId);
+      if (error) throw new Error(error.message);
+      return res.json({ ok: true });
+    }
+    return res.status(400).json({ error: "No disponible en modo JSON/KV." });
+  } catch (error) { next(error); }
+});
+
+// DELETE cancha (solo si no tiene reservas futuras)
+app.delete("/api/:slug/admin/canchas/:id", resolveClub, requireAdmin, async (req, res, next) => {
+  try {
+    const clubId = req.club.id;
+    const id = Number(req.params.id);
+    const hoy = new Date().toISOString().split("T")[0];
+
+    if (USE_SQLITE) {
+      const cancha = await dbGet("SELECT * FROM canchas WHERE id = ? AND club_id = ?", [id, clubId]);
+      if (!cancha) return res.status(404).json({ error: "Cancha no encontrada." });
+      const futuras = await dbAll(
+        "SELECT id FROM reservas WHERE club_id = ? AND cancha = ? AND fecha >= ?",
+        [clubId, cancha.nombre, hoy]
+      );
+      if (futuras.length) return res.status(409).json({ error: `La cancha tiene ${futuras.length} reserva(s) futura(s). Cancelalas primero.` });
+      await dbRun("DELETE FROM canchas WHERE id = ? AND club_id = ?", [id, clubId]);
+      return res.json({ ok: true });
+    }
+    if (USE_SUPABASE) {
+      const { data: cancha } = await supabase.from("canchas").select("*").eq("id", id).eq("club_id", clubId).maybeSingle();
+      if (!cancha) return res.status(404).json({ error: "Cancha no encontrada." });
+      const { data: futuras } = await supabase.from("reservas")
+        .select("id").eq("club_id", clubId).eq("cancha", cancha.nombre).gte("fecha", hoy);
+      if (futuras?.length) return res.status(409).json({ error: `La cancha tiene ${futuras.length} reserva(s) futura(s). Cancelalas primero.` });
+      await supabase.from("canchas").delete().eq("id", id).eq("club_id", clubId);
+      return res.json({ ok: true });
+    }
+    return res.status(400).json({ error: "No disponible en modo JSON/KV." });
+  } catch (error) { next(error); }
+});
+
+// PATCH editar configuración general del club
+app.patch("/api/:slug/admin/club", resolveClub, requireAdmin, async (req, res, next) => {
+  try {
+    const clubId = req.club.id;
+    const body = req.body || {};
+
+    const nombre = (body.nombre || "").trim();
+    const whatsapp = (body.whatsapp || "").replace(/\D/g, "");
+    const transferAlias = (body.transferAlias || "").trim();
+    const transferCbu = (body.transferCbu || "").trim();
+    const transferTitular = (body.transferTitular || "").trim();
+    const horaInicio = parseInt(body.horaInicio, 10);
+    const horaFin = parseInt(body.horaFin, 10);
+    const precio = (body.precio || "0").trim();
+
+    if (!nombre) return res.status(400).json({ error: "El nombre del club es obligatorio." });
+    if (!Number.isFinite(horaInicio) || !Number.isFinite(horaFin) || horaInicio >= horaFin) {
+      return res.status(400).json({ error: "Horario inválido: hora inicio debe ser menor a hora fin." });
+    }
+    if (horaInicio < 0 || horaFin > 23) return res.status(400).json({ error: "Horario fuera de rango (0-23)." });
+
+    if (USE_SQLITE) {
+      await dbRun(
+        `UPDATE clubs SET nombre=?, whatsapp=?, transfer_alias=?, transfer_cbu=?, transfer_titular=?,
+         hora_inicio=?, hora_fin=?, precio=? WHERE id=?`,
+        [nombre, whatsapp, transferAlias, transferCbu, transferTitular, horaInicio, horaFin, precio, clubId]
+      );
+      return res.json({ ok: true });
+    }
+    if (USE_SUPABASE) {
+      const { error } = await supabase.from("clubs").update({
+        nombre, whatsapp, transfer_alias: transferAlias, transfer_cbu: transferCbu,
+        transfer_titular: transferTitular, hora_inicio: horaInicio, hora_fin: horaFin, precio,
+      }).eq("id", clubId);
+      if (error) throw new Error(error.message);
+      return res.json({ ok: true });
+    }
+    return res.status(400).json({ error: "No disponible en modo JSON/KV." });
+  } catch (error) { next(error); }
+});
+
+// POST cambiar contraseña admin
+app.post("/api/:slug/admin/password", resolveClub, requireAdmin, async (req, res, next) => {
+  try {
+    const clubId = req.club.id;
+    const passwordActual = (req.body?.passwordActual || "").trim();
+    const passwordNuevo = (req.body?.passwordNuevo || "").trim();
+
+    if (!passwordActual || !passwordNuevo) return res.status(400).json({ error: "Ambas contraseñas son requeridas." });
+    if (passwordNuevo.length < 6) return res.status(400).json({ error: "La nueva contraseña debe tener al menos 6 caracteres." });
+
+    const ok = await verifyAdminPasswordForClub(passwordActual, clubId);
+    if (!ok) return res.status(401).json({ error: "La contraseña actual es incorrecta." });
+
+    const { salt, hash } = hashAdminPassword(passwordNuevo);
+    const now = new Date().toISOString();
+
+    if (USE_SQLITE) {
+      await dbRun(
+        "UPDATE admins SET password_salt=?, password_hash=?, password_salt_b=NULL, password_hash_b=NULL, actualizado_en=? WHERE club_id=?",
+        [salt, hash, now, clubId]
+      );
+      return res.json({ ok: true });
+    }
+    if (USE_SUPABASE) {
+      const { error } = await supabase.from("admins").update({
+        password_salt: salt, password_hash: hash,
+        password_salt_b: null, password_hash_b: null, actualizado_en: now,
+      }).eq("club_id", clubId);
+      if (error) throw new Error(error.message);
+      return res.json({ ok: true });
+    }
+    return res.status(400).json({ error: "No disponible en modo JSON/KV." });
+  } catch (error) { next(error); }
+});
+
+// ============================================================
 // RUTAS DE PAGINAS  /:slug  y  /:slug/admin
 // ============================================================
 app.get("/", async (_req, res) => {

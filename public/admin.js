@@ -219,6 +219,162 @@ reservasList.addEventListener("click", async (event) => {
   } catch (error) { setMessage(adminMessage, error.message || "No se pudo cancelar el turno."); }
 });
 
+// ── Configuración del club ────────────────────────────────────
+
+const btnToggleConfig = document.getElementById("btnToggleConfig");
+const configPanel = document.getElementById("configPanel");
+const configChevron = document.getElementById("configChevron");
+
+const cfgNombre = document.getElementById("cfgNombre");
+const cfgWhatsapp = document.getElementById("cfgWhatsapp");
+const cfgHoraInicio = document.getElementById("cfgHoraInicio");
+const cfgHoraFin = document.getElementById("cfgHoraFin");
+const cfgPrecio = document.getElementById("cfgPrecio");
+const cfgAlias = document.getElementById("cfgAlias");
+const cfgCbu = document.getElementById("cfgCbu");
+const cfgTitular = document.getElementById("cfgTitular");
+const btnGuardarClub = document.getElementById("btnGuardarClub");
+const cfgClubMsg = document.getElementById("cfgClubMsg");
+
+const canchasList = document.getElementById("canchasList");
+const nuevaCanchaNombre = document.getElementById("nuevaCanchaNombre");
+const nuevaCanchaEtiqueta = document.getElementById("nuevaCanchaEtiqueta");
+const btnAgregarCancha = document.getElementById("btnAgregarCancha");
+const cfgCanchaMsg = document.getElementById("cfgCanchaMsg");
+
+const cfgPassActual = document.getElementById("cfgPassActual");
+const cfgPassNuevo = document.getElementById("cfgPassNuevo");
+const btnCambiarPass = document.getElementById("btnCambiarPass");
+const cfgPassMsg = document.getElementById("cfgPassMsg");
+
+btnToggleConfig.addEventListener("click", () => {
+  const hidden = configPanel.classList.toggle("hidden");
+  configChevron.style.transform = hidden ? "" : "rotate(180deg)";
+  if (!hidden) loadConfigPanel();
+});
+
+function fillClubForm(cfg) {
+  cfgNombre.value = cfg.nombre || "";
+  cfgWhatsapp.value = cfg.whatsappNumero || "";
+  cfgHoraInicio.value = cfg.horaInicio ?? 10;
+  cfgHoraFin.value = cfg.horaFin ?? 23;
+  cfgPrecio.value = cfg.precio || "0";
+  cfgAlias.value = cfg.transferencia?.alias || "";
+  cfgCbu.value = cfg.transferencia?.cbu || "";
+  cfgTitular.value = cfg.transferencia?.titular || "";
+}
+
+async function loadCanchas() {
+  const canchas = await api(`/api/${CLUB_SLUG}/admin/canchas`);
+  if (!canchas.length) {
+    canchasList.innerHTML = "<p class='text-slate-500 text-sm'>No hay canchas cargadas.</p>";
+    return;
+  }
+  canchasList.innerHTML = canchas.map((c) => `
+    <div class="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2" data-cancha-id="${c.id}">
+      <span class="font-mono text-sm bg-slate-200 rounded px-2 py-0.5">${c.nombre}</span>
+      <input type="text" value="${c.etiqueta}" class="flex-1 rounded border border-slate-300 px-2 py-1 text-sm cancha-etiqueta-input" data-id="${c.id}" />
+      <button class="rounded bg-blue-600 px-2 py-1 text-xs font-semibold text-white hover:bg-blue-700"
+        data-action="renombrar-cancha" data-id="${c.id}" type="button">Guardar</button>
+      <button class="rounded bg-red-600 px-2 py-1 text-xs font-semibold text-white hover:bg-red-700"
+        data-action="eliminar-cancha" data-id="${c.id}" type="button">Eliminar</button>
+    </div>
+  `).join("");
+}
+
+async function loadConfigPanel() {
+  try {
+    fillClubForm(config);
+    await loadCanchas();
+  } catch (error) {
+    cfgClubMsg.textContent = error.message || "No se pudo cargar la configuracion.";
+    cfgClubMsg.style.color = "#c62020";
+  }
+}
+
+btnGuardarClub.addEventListener("click", async () => {
+  try {
+    await api(`/api/${CLUB_SLUG}/admin/club`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        nombre: cfgNombre.value.trim(),
+        whatsapp: cfgWhatsapp.value.trim(),
+        horaInicio: cfgHoraInicio.value,
+        horaFin: cfgHoraFin.value,
+        precio: cfgPrecio.value.trim(),
+        transferAlias: cfgAlias.value.trim(),
+        transferCbu: cfgCbu.value.trim(),
+        transferTitular: cfgTitular.value.trim(),
+      }),
+    });
+    setMessage(cfgClubMsg, "Cambios guardados.", false);
+    // Recargar config para reflejar cambios en el resto del panel
+    await loadConfig();
+  } catch (error) { setMessage(cfgClubMsg, error.message || "No se pudo guardar."); }
+});
+
+btnAgregarCancha.addEventListener("click", async () => {
+  try {
+    await api(`/api/${CLUB_SLUG}/admin/canchas`, {
+      method: "POST",
+      body: JSON.stringify({
+        nombre: nuevaCanchaNombre.value.trim(),
+        etiqueta: nuevaCanchaEtiqueta.value.trim(),
+      }),
+    });
+    nuevaCanchaNombre.value = "";
+    nuevaCanchaEtiqueta.value = "";
+    setMessage(cfgCanchaMsg, "Cancha agregada.", false);
+    await loadCanchas();
+    await loadConfig();
+  } catch (error) { setMessage(cfgCanchaMsg, error.message || "No se pudo agregar la cancha."); }
+});
+
+canchasList.addEventListener("click", async (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+
+  if (target.dataset.action === "renombrar-cancha") {
+    const id = target.dataset.id;
+    const input = canchasList.querySelector(`.cancha-etiqueta-input[data-id="${id}"]`);
+    const etiqueta = input?.value.trim();
+    if (!etiqueta) { setMessage(cfgCanchaMsg, "La etiqueta no puede estar vacia."); return; }
+    try {
+      await api(`/api/${CLUB_SLUG}/admin/canchas/${id}`, { method: "PUT", body: JSON.stringify({ etiqueta }) });
+      setMessage(cfgCanchaMsg, "Etiqueta actualizada.", false);
+      await loadConfig();
+    } catch (error) { setMessage(cfgCanchaMsg, error.message || "No se pudo actualizar."); }
+  }
+
+  if (target.dataset.action === "eliminar-cancha") {
+    const id = target.dataset.id;
+    if (!window.confirm("¿Eliminar esta cancha? Solo se puede si no tiene reservas futuras.")) return;
+    try {
+      await api(`/api/${CLUB_SLUG}/admin/canchas/${id}`, { method: "DELETE" });
+      setMessage(cfgCanchaMsg, "Cancha eliminada.", false);
+      await loadCanchas();
+      await loadConfig();
+    } catch (error) { setMessage(cfgCanchaMsg, error.message || "No se pudo eliminar."); }
+  }
+});
+
+btnCambiarPass.addEventListener("click", async () => {
+  try {
+    await api(`/api/${CLUB_SLUG}/admin/password`, {
+      method: "POST",
+      body: JSON.stringify({
+        passwordActual: cfgPassActual.value,
+        passwordNuevo: cfgPassNuevo.value,
+      }),
+    });
+    cfgPassActual.value = "";
+    cfgPassNuevo.value = "";
+    setMessage(cfgPassMsg, "Contrasena cambiada correctamente.", false);
+  } catch (error) { setMessage(cfgPassMsg, error.message || "No se pudo cambiar la contrasena."); }
+});
+
+// ─────────────────────────────────────────────────────────────
+
 async function init() {
   bloqFecha.value = todayISO();
   await loadConfig();
