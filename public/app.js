@@ -76,6 +76,17 @@ async function loadConfig() {
   // Actualizar titulo con nombre del club
   const h1 = document.querySelector("h1");
   if (h1 && config.nombre) h1.textContent = `Reservas - ${config.nombre}`;
+
+  // Logo o avatar con iniciales en la navbar
+  const navLogo = document.getElementById("navLogo");
+  if (navLogo) {
+    if (config.logoUrl) {
+      navLogo.outerHTML = `<img id="navLogo" src="${config.logoUrl}" alt="${config.nombre}" class="h-12 w-12 md:h-14 md:w-14 rounded-full object-cover ring-1 ring-zinc-600" />`;
+    } else {
+      const initials = config.nombre.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || "").join("");
+      navLogo.textContent = initials;
+    }
+  }
 }
 
 async function loadReservas() {

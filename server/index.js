@@ -58,9 +58,16 @@ function parseDefaultCanchas() {
 }
 
 const LOGOS_DIR = path.join(UPLOADS_DIR, "logos");
+const SOLICITUDES_DIR = path.join(UPLOADS_DIR, "solicitudes");
 if (!fsSync.existsSync(DATA_DIR)) fsSync.mkdirSync(DATA_DIR, { recursive: true });
 if (!fsSync.existsSync(UPLOADS_DIR)) fsSync.mkdirSync(UPLOADS_DIR, { recursive: true });
 if (!fsSync.existsSync(LOGOS_DIR)) fsSync.mkdirSync(LOGOS_DIR, { recursive: true });
+if (!fsSync.existsSync(SOLICITUDES_DIR)) fsSync.mkdirSync(SOLICITUDES_DIR, { recursive: true });
+
+const SUBSCRIPTION_PRECIO = process.env.SUBSCRIPTION_PRECIO || "0";
+const SUBSCRIPTION_ALIAS = process.env.SUBSCRIPTION_TRANSFER_ALIAS || "";
+const SUBSCRIPTION_CBU = process.env.SUBSCRIPTION_TRANSFER_CBU || "";
+const SUBSCRIPTION_TITULAR = process.env.SUBSCRIPTION_TRANSFER_TITULAR || "";
 
 const db = USE_SQLITE ? new sqlite3.Database(DB_FILE) : null;
 
@@ -188,6 +195,20 @@ async function initDb() {
   if (!bloqueoColSet.has("club_id")) {
     await dbRun("ALTER TABLE bloqueos ADD COLUMN club_id INTEGER");
   }
+
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS solicitudes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nombre TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      deporte TEXT NOT NULL DEFAULT 'futbol',
+      whatsapp TEXT NOT NULL,
+      email TEXT NOT NULL,
+      comprobante_url TEXT,
+      estado TEXT NOT NULL DEFAULT 'pendiente',
+      creado_en TEXT NOT NULL
+    )
+  `);
 }
 
 // ============================================================
@@ -657,7 +678,7 @@ const logoUpload = multer({
 
 app.use(express.json());
 app.use("/uploads", express.static(UPLOADS_DIR));
-app.use(express.static(path.join(ROOT_DIR, "public")));
+app.use(express.static(path.join(ROOT_DIR, "public"), { index: false }));
 
 const dbReady = initDb()
   .then(() => seedDefaultClub())
@@ -689,6 +710,7 @@ app.get("/api/:slug/config", resolveClub, (req, res) => {
     slug: club.slug,
     nombre: club.nombre,
     deporte: club.deporte,
+    logoUrl: club.logoUrl,
     canchas: club.canchas,
     horarios: generarHorarios(club),
     horaInicio: club.horaInicio,
@@ -1116,13 +1138,13 @@ app.patch("/api/:slug/admin/reservas/:id/estado", resolveClub, requireAdmin, asy
 app.get("/api/clubs", async (_req, res, next) => {
   try {
     if (USE_SQLITE) {
-      const rows = await dbAll("SELECT slug, nombre, logo_url FROM clubs WHERE activo = 1 ORDER BY id ASC");
-      return res.json(rows.map((r) => ({ slug: r.slug, nombre: r.nombre, logoUrl: r.logo_url || null })));
+      const rows = await dbAll("SELECT slug, nombre, logo_url, deporte FROM clubs WHERE activo = 1 ORDER BY id ASC");
+      return res.json(rows.map((r) => ({ slug: r.slug, nombre: r.nombre, logoUrl: r.logo_url || null, deporte: r.deporte || "futbol" })));
     }
     if (USE_SUPABASE) {
-      const { data, error } = await supabase.from("clubs").select("slug, nombre, logo_url").eq("activo", true).order("id");
+      const { data, error } = await supabase.from("clubs").select("slug, nombre, logo_url, deporte").eq("activo", true).order("id");
       if (error) throw new Error(error.message);
-      return res.json((data || []).map((r) => ({ slug: r.slug, nombre: r.nombre, logoUrl: r.logo_url || null })));
+      return res.json((data || []).map((r) => ({ slug: r.slug, nombre: r.nombre, logoUrl: r.logo_url || null, deporte: r.deporte || "futbol" })));
     }
     return res.json([]);
   } catch (error) { next(error); }
@@ -1207,6 +1229,28 @@ app.post("/api/superadmin/clubs", requireSuperAdmin, async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+app.patch("/api/superadmin/clubs/:id/activo", requireSuperAdmin, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const { activo } = req.body;
+    if (typeof activo !== "boolean") {
+      return res.status(400).json({ error: "activo debe ser true o false." });
+    }
+    if (USE_SQLITE) {
+      const row = await dbGet("SELECT id FROM clubs WHERE id = ? LIMIT 1", [id]);
+      if (!row) return res.status(404).json({ error: "Club no encontrado." });
+      await dbRun("UPDATE clubs SET activo = ? WHERE id = ?", [activo ? 1 : 0, id]);
+      return res.json({ ok: true, activo });
+    }
+    if (USE_SUPABASE) {
+      const { error } = await supabase.from("clubs").update({ activo }).eq("id", id);
+      if (error) throw new Error(error.message);
+      return res.json({ ok: true, activo });
+    }
+    return res.status(503).json({ error: "No hay backend de datos disponible." });
+  } catch (error) { next(error); }
+});
+
 app.patch("/api/superadmin/clubs/:id/logo", requireSuperAdmin, logoUpload.single("logo"), async (req, res, next) => {
   try {
     const id = Number(req.params.id);
@@ -1237,6 +1281,172 @@ app.patch("/api/superadmin/clubs/:id/logo", requireSuperAdmin, logoUpload.single
 });
 
 // ============================================================
+// SOLICITUDES DE REGISTRO (públicas + superadmin)
+// ============================================================
+
+app.get("/api/suscripcion", (_req, res) => {
+  res.json({
+    precio: SUBSCRIPTION_PRECIO,
+    alias: SUBSCRIPTION_ALIAS,
+    cbu: SUBSCRIPTION_CBU,
+    titular: SUBSCRIPTION_TITULAR,
+  });
+});
+
+app.post("/api/solicitudes", upload.single("comprobante"), async (req, res, next) => {
+  try {
+    const nombre = (req.body?.nombre || "").trim();
+    const deporte = (req.body?.deporte || "futbol").trim();
+    const whatsapp = (req.body?.whatsapp || "").trim().replace(/\D/g, "");
+    const email = (req.body?.email || "").trim().toLowerCase();
+
+    if (!nombre || !whatsapp || !email) {
+      return res.status(400).json({ error: "Nombre, WhatsApp y email son requeridos." });
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: "El comprobante de pago es requerido." });
+    }
+
+    const slug = nombre
+      .toLowerCase()
+      .normalize("NFD").replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 50);
+
+    const now = new Date().toISOString();
+    let comprobanteUrl = null;
+
+    if (USE_SQLITE) {
+      const ext = path.extname(req.file.originalname) || ".jpg";
+      const filename = `sol_${Date.now()}${ext}`;
+      await fs.writeFile(path.join(SOLICITUDES_DIR, filename), req.file.buffer || await fs.readFile(req.file.path));
+      comprobanteUrl = `/uploads/solicitudes/${filename}`;
+      const result = await dbRun(
+        `INSERT INTO solicitudes (nombre, slug, deporte, whatsapp, email, comprobante_url, estado, creado_en)
+         VALUES (?, ?, ?, ?, ?, ?, 'pendiente', ?)`,
+        [nombre, slug, deporte, whatsapp, email, comprobanteUrl, now]
+      );
+      return res.status(201).json({ ok: true, id: result.lastID });
+    }
+    if (USE_SUPABASE) {
+      const ext = path.extname(req.file.originalname) || ".jpg";
+      const filename = `solicitudes/sol_${Date.now()}${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from(SUPABASE_BUCKET)
+        .upload(filename, req.file.buffer, { contentType: req.file.mimetype, upsert: false });
+      if (upErr) throw new Error(upErr.message);
+      const { data: urlData } = supabase.storage.from(SUPABASE_BUCKET).getPublicUrl(filename);
+      comprobanteUrl = urlData?.publicUrl || null;
+      const { data, error } = await supabase.from("solicitudes").insert({
+        nombre, slug, deporte, whatsapp, email, comprobante_url: comprobanteUrl, estado: "pendiente", creado_en: now,
+      }).select().single();
+      if (error) throw new Error(error.message);
+      return res.status(201).json({ ok: true, id: data.id });
+    }
+    return res.status(503).json({ error: "No hay backend disponible." });
+  } catch (error) { next(error); }
+});
+
+app.get("/api/superadmin/solicitudes", requireSuperAdmin, async (_req, res, next) => {
+  try {
+    if (USE_SQLITE) {
+      const rows = await dbAll("SELECT * FROM solicitudes ORDER BY creado_en DESC");
+      return res.json(rows);
+    }
+    if (USE_SUPABASE) {
+      const { data, error } = await supabase.from("solicitudes").select("*").order("creado_en", { ascending: false });
+      if (error) throw new Error(error.message);
+      return res.json(data || []);
+    }
+    return res.json([]);
+  } catch (error) { next(error); }
+});
+
+app.patch("/api/superadmin/solicitudes/:id/aprobar", requireSuperAdmin, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const password = (req.body?.password || "").trim();
+    const slugOverride = (req.body?.slug || "").trim();
+
+    if (!password) return res.status(400).json({ error: "La clave admin del club es requerida." });
+
+    const { salt, hash } = hashAdminPassword(password);
+    const now = new Date().toISOString();
+
+    if (USE_SQLITE) {
+      const sol = await dbGet("SELECT * FROM solicitudes WHERE id = ? LIMIT 1", [id]);
+      if (!sol) return res.status(404).json({ error: "Solicitud no encontrada." });
+      if (sol.estado !== "pendiente") return res.status(400).json({ error: "La solicitud ya fue procesada." });
+
+      const slug = slugOverride || sol.slug;
+      const existing = await dbGet("SELECT id FROM clubs WHERE slug = ? LIMIT 1", [slug]);
+      if (existing) return res.status(409).json({ error: `Ya existe un club con el slug "${slug}".` });
+
+      const result = await dbRun(
+        `INSERT INTO clubs (slug, nombre, deporte, whatsapp, transfer_alias, transfer_cbu, transfer_titular,
+          hora_inicio, hora_fin, precio, activo, creado_en)
+         VALUES (?, ?, ?, ?, '', '', '', 10, 23, '0', 1, ?)`,
+        [slug, sol.nombre, sol.deporte, sol.whatsapp, now]
+      );
+      await dbRun(
+        "INSERT INTO admins (club_id, password_salt, password_hash, actualizado_en) VALUES (?, ?, ?, ?)",
+        [result.lastID, salt, hash, now]
+      );
+      await dbRun("UPDATE solicitudes SET estado = 'aprobada' WHERE id = ?", [id]);
+      return res.json({ ok: true, slug, nombre: sol.nombre });
+    }
+    if (USE_SUPABASE) {
+      const { data: sol, error: solErr } = await supabase.from("solicitudes").select("*").eq("id", id).maybeSingle();
+      if (solErr || !sol) return res.status(404).json({ error: "Solicitud no encontrada." });
+      if (sol.estado !== "pendiente") return res.status(400).json({ error: "La solicitud ya fue procesada." });
+
+      const slug = slugOverride || sol.slug;
+      const { data: existing } = await supabase.from("clubs").select("id").eq("slug", slug).maybeSingle();
+      if (existing) return res.status(409).json({ error: `Ya existe un club con el slug "${slug}".` });
+
+      const { data: club, error: clubErr } = await supabase.from("clubs").insert({
+        slug, nombre: sol.nombre, deporte: sol.deporte, whatsapp: sol.whatsapp,
+        transfer_alias: "", transfer_cbu: "", transfer_titular: "",
+        hora_inicio: 10, hora_fin: 23, precio: "0", activo: true, creado_en: now,
+      }).select().single();
+      if (clubErr) throw new Error(clubErr.message);
+
+      const { error: adminErr } = await supabase.from("admins").insert({
+        club_id: club.id, password_salt: salt, password_hash: hash,
+        password_salt_b: null, password_hash_b: null, actualizado_en: now,
+      });
+      if (adminErr) throw new Error(adminErr.message);
+
+      await supabase.from("solicitudes").update({ estado: "aprobada" }).eq("id", id);
+      return res.json({ ok: true, slug, nombre: sol.nombre });
+    }
+    return res.status(503).json({ error: "No hay backend disponible." });
+  } catch (error) { next(error); }
+});
+
+app.patch("/api/superadmin/solicitudes/:id/rechazar", requireSuperAdmin, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (USE_SQLITE) {
+      const sol = await dbGet("SELECT id, estado FROM solicitudes WHERE id = ? LIMIT 1", [id]);
+      if (!sol) return res.status(404).json({ error: "Solicitud no encontrada." });
+      if (sol.estado !== "pendiente") return res.status(400).json({ error: "La solicitud ya fue procesada." });
+      await dbRun("UPDATE solicitudes SET estado = 'rechazada' WHERE id = ?", [id]);
+      return res.json({ ok: true });
+    }
+    if (USE_SUPABASE) {
+      const { data: sol } = await supabase.from("solicitudes").select("id, estado").eq("id", id).maybeSingle();
+      if (!sol) return res.status(404).json({ error: "Solicitud no encontrada." });
+      if (sol.estado !== "pendiente") return res.status(400).json({ error: "La solicitud ya fue procesada." });
+      await supabase.from("solicitudes").update({ estado: "rechazada" }).eq("id", id);
+      return res.json({ ok: true });
+    }
+    return res.status(503).json({ error: "No hay backend disponible." });
+  } catch (error) { next(error); }
+});
+
+// ============================================================
 // RUTAS DE PAGINAS  /:slug  y  /:slug/admin
 // ============================================================
 app.get("/", (_req, res) => {
@@ -1245,6 +1455,10 @@ app.get("/", (_req, res) => {
 
 app.get("/superadmin", (_req, res) => {
   res.sendFile(path.join(ROOT_DIR, "public", "superadmin.html"));
+});
+
+app.get("/registro", (_req, res) => {
+  res.sendFile(path.join(ROOT_DIR, "public", "register.html"));
 });
 
 app.get("/:slug", async (req, res, next) => {

@@ -57,6 +57,47 @@
         <p id="logoMsg" class="text-sm hidden"></p>
       </section>
 
+      <!-- Solicitudes de registro -->
+      <section class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-lg font-semibold text-slate-700">Solicitudes de registro</h2>
+            <p class="text-xs text-slate-400">Clubs que quieren unirse y esperan aprobación</p>
+          </div>
+          <button id="btnRefreshSolicitudes" class="text-xs text-green-700 hover:underline font-semibold">Actualizar</button>
+        </div>
+        <div id="solicitudesList" class="space-y-3 text-sm text-slate-500">Cargando...</div>
+        <p id="solicitudMsg" class="text-sm hidden"></p>
+      </section>
+
+      <!-- Modal aprobar solicitud -->
+      <div id="modalAprobar" class="hidden fixed inset-0 z-20 flex items-center justify-center bg-black/50 p-4">
+        <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm space-y-4">
+          <h3 class="text-lg font-bold text-slate-800">Aprobar solicitud</h3>
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 mb-1">Slug del club (URL)</label>
+            <input id="modalSlug" type="text"
+                   class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-green-500" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 mb-1">Clave admin del club</label>
+            <input id="modalPassword" type="text" placeholder="Clave que usará el admin"
+                   class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+          </div>
+          <p id="modalMsg" class="text-sm text-red-600 hidden"></p>
+          <div class="flex gap-3">
+            <button id="btnCancelarModal"
+                    class="flex-1 rounded-lg border border-slate-300 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">
+              Cancelar
+            </button>
+            <button id="btnConfirmarAprobar"
+                    class="flex-1 rounded-lg bg-green-700 py-2 text-sm font-bold text-white hover:bg-green-800">
+              Confirmar alta
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- Crear club nuevo -->
       <section class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
         <h2 class="text-lg font-semibold text-slate-700">Agregar club nuevo</h2>

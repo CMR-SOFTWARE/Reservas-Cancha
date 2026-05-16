@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Registrar mi club — Turnos Club</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-slate-100">
+
+  <!-- Navbar -->
+  <nav class="bg-green-950 px-6 py-4">
+    <div class="mx-auto max-w-2xl flex items-center gap-3">
+      <svg width="32" height="32" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="44" height="44" rx="10" fill="#15803d"/>
+        <rect x="7" y="13" width="30" height="20" rx="2" stroke="white" stroke-width="2" fill="none"/>
+        <line x1="22" y1="13" x2="22" y2="33" stroke="white" stroke-width="2"/>
+        <circle cx="22" cy="23" r="4.5" stroke="white" stroke-width="2" fill="none"/>
+        <rect x="7" y="18" width="4" height="10" rx="1" stroke="white" stroke-width="1.5" fill="none"/>
+        <rect x="33" y="18" width="4" height="10" rx="1" stroke="white" stroke-width="1.5" fill="none"/>
+      </svg>
+      <span class="text-white font-bold text-base tracking-tight">Turnos Club</span>
+      <a href="/" class="ml-auto text-xs text-green-300 hover:text-white">← Volver al inicio</a>
+    </div>
+  </nav>
+
+  <main class="mx-auto max-w-2xl px-4 py-10">
+
+    <!-- Header -->
+    <div class="text-center mb-8">
+      <h1 class="text-3xl font-extrabold text-slate-800">Registrá tu club</h1>
+      <p class="text-slate-500 mt-2">Completá el formulario, abonás la suscripción y en 24 hs tu club está activo.</p>
+    </div>
+
+    <!-- Stepper -->
+    <div class="flex items-center justify-center gap-2 mb-8">
+      <div id="step1Dot" class="flex items-center gap-2">
+        <div class="w-8 h-8 rounded-full bg-green-700 text-white text-sm font-bold flex items-center justify-center">1</div>
+        <span class="text-sm font-semibold text-green-700">Datos del club</span>
+      </div>
+      <div class="flex-1 h-px bg-slate-300 max-w-12"></div>
+      <div id="step2Dot" class="flex items-center gap-2">
+        <div id="dot2" class="w-8 h-8 rounded-full bg-slate-300 text-slate-500 text-sm font-bold flex items-center justify-center">2</div>
+        <span id="label2" class="text-sm font-semibold text-slate-400">Pago</span>
+      </div>
+      <div class="flex-1 h-px bg-slate-300 max-w-12"></div>
+      <div id="step3Dot" class="flex items-center gap-2">
+        <div id="dot3" class="w-8 h-8 rounded-full bg-slate-300 text-slate-500 text-sm font-bold flex items-center justify-center">3</div>
+        <span id="label3" class="text-sm font-semibold text-slate-400">Confirmación</span>
+      </div>
+    </div>
+
+    <!-- Paso 1: Datos del club -->
+    <section id="paso1" class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-5">
+      <h2 class="text-lg font-bold text-slate-700">Datos del club</h2>
+
+      <div>
+        <label class="block text-sm font-semibold text-slate-600 mb-1">Nombre del club *</label>
+        <input id="nombre" type="text" placeholder="Ej: Club Deportivo Norte"
+               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+        <p class="text-xs text-slate-400 mt-1">URL generada: <span id="slugPreview" class="font-mono text-green-700">—</span></p>
+      </div>
+
+      <div>
+        <label class="block text-sm font-semibold text-slate-600 mb-1">Deporte principal *</label>
+        <select id="deporte" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+          <option value="futbol">Fútbol</option>
+          <option value="padel">Pádel</option>
+          <option value="tenis">Tenis</option>
+          <option value="basquet">Básquet</option>
+          <option value="voley">Voley</option>
+          <option value="hockey">Hockey</option>
+          <option value="multideporte">Multideporte</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="block text-sm font-semibold text-slate-600 mb-1">WhatsApp del club *</label>
+        <div class="flex gap-2">
+          <span class="flex items-center px-3 rounded-lg border border-slate-300 bg-slate-50 text-sm text-slate-500">+54 9</span>
+          <input id="whatsapp" type="tel" inputmode="numeric" placeholder="3364 218151"
+                 class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-sm font-semibold text-slate-600 mb-1">Email de contacto *</label>
+        <input id="email" type="email" placeholder="admin@miclub.com"
+               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+      </div>
+
+      <p id="msg1" class="text-sm text-red-600 hidden"></p>
+
+      <button id="btnSiguiente"
+              class="w-full rounded-xl bg-green-700 py-3 text-sm font-bold text-white hover:bg-green-800 transition-colors">
+        Continuar al pago →
+      </button>
+    </section>
+
+    <!-- Paso 2: Pago -->
+    <section id="paso2" class="hidden bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-5">
+      <h2 class="text-lg font-bold text-slate-700">Abonás la suscripción</h2>
+
+      <div class="rounded-xl bg-green-50 border border-green-200 p-4 space-y-1">
+        <p class="text-sm font-semibold text-green-800">Monto a transferir</p>
+        <p class="text-3xl font-extrabold text-green-700">$<span id="precioSub">—</span></p>
+        <p class="text-xs text-green-600">Suscripción mensual — Turnos Club</p>
+      </div>
+
+      <div class="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-1.5 text-sm">
+        <p><span class="font-semibold text-slate-600">Alias:</span> <span id="aliasSub" class="font-mono">—</span></p>
+        <p><span class="font-semibold text-slate-600">CBU:</span> <span id="cbuSub" class="font-mono text-xs">—</span></p>
+        <p><span class="font-semibold text-slate-600">Titular:</span> <span id="titularSub">—</span></p>
+      </div>
+
+      <div>
+        <label class="block text-sm font-semibold text-slate-600 mb-1">Comprobante de transferencia *</label>
+        <input id="comprobante" type="file" accept=".jpg,.jpeg,.png,.webp,.pdf"
+               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm file:mr-3 file:rounded file:border-0 file:bg-green-100 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-green-700 hover:file:bg-green-200 cursor-pointer" />
+        <p class="text-xs text-slate-400 mt-1">JPG, PNG, WEBP o PDF · máx. 5 MB</p>
+      </div>
+
+      <p id="msg2" class="text-sm text-red-600 hidden"></p>
+
+      <div class="flex gap-3">
+        <button id="btnVolver"
+                class="flex-1 rounded-xl border border-slate-300 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
+          ← Volver
+        </button>
+        <button id="btnEnviar"
+                class="flex-1 rounded-xl bg-green-700 py-3 text-sm font-bold text-white hover:bg-green-800 transition-colors">
+          Enviar solicitud
+        </button>
+      </div>
+    </section>
+
+    <!-- Paso 3: Confirmación -->
+    <section id="paso3" class="hidden bg-white rounded-2xl border border-slate-200 shadow-sm p-8 text-center space-y-4">
+      <div class="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+      </div>
+      <h2 class="text-2xl font-extrabold text-slate-800">¡Solicitud enviada!</h2>
+      <p class="text-slate-500 text-sm max-w-sm mx-auto">
+        Recibimos tu comprobante. Revisaremos el pago y activaremos tu club en menos de 24 horas.
+        Te avisamos por WhatsApp cuando esté listo.
+      </p>
+      <a href="/"
+         class="inline-block mt-4 rounded-xl bg-green-700 px-6 py-3 text-sm font-bold text-white hover:bg-green-800 transition-colors">
+        Volver al inicio
+      </a>
+    </section>
+
+  </main>
+
+  <script src="/register.js"></script>
+</body>
+</html>

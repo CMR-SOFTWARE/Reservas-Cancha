@@ -1,3 +1,13 @@
+const modalAprobar = document.getElementById("modalAprobar");
+const modalSlug = document.getElementById("modalSlug");
+const modalPassword = document.getElementById("modalPassword");
+const modalMsg = document.getElementById("modalMsg");
+const solicitudMsg = document.getElementById("solicitudMsg");
+const solicitudesList = document.getElementById("solicitudesList");
+const btnRefreshSolicitudes = document.getElementById("btnRefreshSolicitudes");
+
+let pendingSolicitudId = null;
+
 const loginCard = document.getElementById("loginCard");
 const saPanel = document.getElementById("saPanel");
 const saPassword = document.getElementById("saPassword");
@@ -92,6 +102,10 @@ async function loadClubs() {
                   data-action="subir-logo" data-club-id="${c.id}">
             Subir logo
           </button>
+          <button class="rounded-lg px-3 py-1.5 text-xs font-semibold flex-shrink-0 ${c.activo ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'}"
+                  data-action="toggle-activo" data-club-id="${c.id}" data-activo="${c.activo ? '1' : '0'}">
+            ${c.activo ? 'Desactivar' : 'Activar'}
+          </button>
           <a href="/${c.slug}" target="_blank"
              class="text-xs text-blue-600 hover:underline flex-shrink-0">Ver</a>
           <a href="/${c.slug}/admin" target="_blank"
@@ -109,34 +123,52 @@ async function loadClubs() {
 async function handleClubListClick(event) {
   const target = event.target;
   if (!(target instanceof HTMLElement)) { clubsList.addEventListener("click", handleClubListClick, { once: true }); return; }
-  if (target.dataset.action !== "subir-logo") { clubsList.addEventListener("click", handleClubListClick, { once: true }); return; }
 
+  const action = target.dataset.action;
   const clubId = target.dataset.clubId;
-  const input = clubsList.querySelector(`.logo-file-input[data-club-id="${clubId}"]`);
-  if (!input?.files?.length) {
-    setMsg(logoMsg, "Seleccioná una imagen primero.");
-    clubsList.addEventListener("click", handleClubListClick, { once: true });
+
+  if (action === "subir-logo") {
+    const input = clubsList.querySelector(`.logo-file-input[data-club-id="${clubId}"]`);
+    if (!input?.files?.length) {
+      setMsg(logoMsg, "Seleccioná una imagen primero.");
+      clubsList.addEventListener("click", handleClubListClick, { once: true });
+      return;
+    }
+    const formData = new FormData();
+    formData.append("logo", input.files[0]);
+    try {
+      target.disabled = true;
+      target.textContent = "Subiendo...";
+      await api(`/api/superadmin/clubs/${clubId}/logo`, { method: "PATCH", body: formData });
+      setMsg(logoMsg, "Logo actualizado correctamente.", false);
+      await loadClubs();
+    } catch (error) {
+      setMsg(logoMsg, error.message || "No se pudo subir el logo.");
+      target.disabled = false;
+      target.textContent = "Subir logo";
+      clubsList.addEventListener("click", handleClubListClick, { once: true });
+    }
     return;
   }
 
-  const formData = new FormData();
-  formData.append("logo", input.files[0]);
-
-  try {
-    target.disabled = true;
-    target.textContent = "Subiendo...";
-    const data = await api(`/api/superadmin/clubs/${clubId}/logo`, {
-      method: "PATCH",
-      body: formData,
-    });
-    setMsg(logoMsg, "Logo actualizado correctamente.", false);
-    await loadClubs();
-  } catch (error) {
-    setMsg(logoMsg, error.message || "No se pudo subir el logo.");
-    target.disabled = false;
-    target.textContent = "Subir logo";
-    clubsList.addEventListener("click", handleClubListClick, { once: true });
+  if (action === "toggle-activo") {
+    const nuevoEstado = target.dataset.activo !== "1";
+    try {
+      target.disabled = true;
+      await api(`/api/superadmin/clubs/${clubId}/activo`, {
+        method: "PATCH",
+        body: JSON.stringify({ activo: nuevoEstado }),
+      });
+      await loadClubs();
+    } catch (error) {
+      setMsg(logoMsg, error.message || "No se pudo cambiar el estado.");
+      target.disabled = false;
+      clubsList.addEventListener("click", handleClubListClick, { once: true });
+    }
+    return;
   }
+
+  clubsList.addEventListener("click", handleClubListClick, { once: true });
 }
 
 btnSaLogin.addEventListener("click", async () => {
@@ -151,11 +183,127 @@ btnSaLogin.addEventListener("click", async () => {
     sessionStorage.setItem("saToken", saToken);
     loginCard.classList.add("hidden");
     saPanel.classList.remove("hidden");
-    await loadClubs();
+    await Promise.all([loadClubs(), loadSolicitudes()]);
   } catch (error) { setMsg(loginMsg, error.message || "No se pudo iniciar sesión."); }
 });
 
 btnRefreshClubs.addEventListener("click", loadClubs);
+
+const ESTADO_BADGE = {
+  pendiente: "bg-amber-100 text-amber-700",
+  aprobada: "bg-emerald-100 text-emerald-700",
+  rechazada: "bg-red-100 text-red-600",
+};
+
+async function loadSolicitudes() {
+  solicitudesList.textContent = "Cargando...";
+  try {
+    const lista = await api("/api/superadmin/solicitudes");
+    if (!lista.length) {
+      solicitudesList.innerHTML = "<p class='text-slate-400 text-sm'>No hay solicitudes aún.</p>";
+      return;
+    }
+    solicitudesList.innerHTML = lista.map((s) => `
+      <div class="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2">
+        <div class="flex items-start justify-between gap-2">
+          <div>
+            <div class="font-semibold text-slate-800">${s.nombre}</div>
+            <div class="text-xs text-slate-400">${s.email} · WA: ${s.whatsapp} · <span class="capitalize">${s.deporte}</span></div>
+            <div class="text-xs text-slate-400 font-mono">slug sugerido: /${s.slug}</div>
+          </div>
+          <span class="text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${ESTADO_BADGE[s.estado] || ''}">
+            ${s.estado.charAt(0).toUpperCase() + s.estado.slice(1)}
+          </span>
+        </div>
+        ${s.comprobante_url ? `<a href="${s.comprobante_url}" target="_blank" class="text-xs text-blue-600 hover:underline">Ver comprobante</a>` : ""}
+        ${s.estado === "pendiente" ? `
+        <div class="flex gap-2 pt-1">
+          <button class="rounded-lg bg-green-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-800"
+                  data-sol-action="aprobar" data-sol-id="${s.id}" data-sol-slug="${s.slug}">
+            Aprobar
+          </button>
+          <button class="rounded-lg bg-red-100 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-200"
+                  data-sol-action="rechazar" data-sol-id="${s.id}">
+            Rechazar
+          </button>
+        </div>` : ""}
+      </div>
+    `).join("");
+
+    solicitudesList.addEventListener("click", handleSolicitudClick, { once: true });
+  } catch (error) {
+    solicitudesList.textContent = error.message;
+  }
+}
+
+async function handleSolicitudClick(event) {
+  const btn = event.target.closest("[data-sol-action]");
+  if (!btn) { solicitudesList.addEventListener("click", handleSolicitudClick, { once: true }); return; }
+
+  const action = btn.dataset.solAction;
+  const id = btn.dataset.solId;
+
+  if (action === "aprobar") {
+    pendingSolicitudId = id;
+    modalSlug.value = btn.dataset.solSlug || "";
+    modalPassword.value = "";
+    modalMsg.classList.add("hidden");
+    modalAprobar.classList.remove("hidden");
+    return;
+  }
+
+  if (action === "rechazar") {
+    if (!confirm("¿Rechazar esta solicitud?")) { solicitudesList.addEventListener("click", handleSolicitudClick, { once: true }); return; }
+    try {
+      btn.disabled = true;
+      await api(`/api/superadmin/solicitudes/${id}/rechazar`, { method: "PATCH" });
+      setMsg(solicitudMsg, "Solicitud rechazada.", false);
+      await loadSolicitudes();
+    } catch (error) {
+      setMsg(solicitudMsg, error.message);
+      btn.disabled = false;
+      solicitudesList.addEventListener("click", handleSolicitudClick, { once: true });
+    }
+  }
+}
+
+document.getElementById("btnCancelarModal").addEventListener("click", () => {
+  modalAprobar.classList.add("hidden");
+  pendingSolicitudId = null;
+  solicitudesList.addEventListener("click", handleSolicitudClick, { once: true });
+});
+
+document.getElementById("btnConfirmarAprobar").addEventListener("click", async () => {
+  const slug = modalSlug.value.trim();
+  const password = modalPassword.value.trim();
+  modalMsg.classList.add("hidden");
+
+  if (!slug) { modalMsg.textContent = "El slug es requerido."; modalMsg.classList.remove("hidden"); return; }
+  if (!password) { modalMsg.textContent = "La clave admin es requerida."; modalMsg.classList.remove("hidden"); return; }
+
+  const btn = document.getElementById("btnConfirmarAprobar");
+  try {
+    btn.disabled = true;
+    btn.textContent = "Procesando...";
+    const data = await api(`/api/superadmin/solicitudes/${pendingSolicitudId}/aprobar`, {
+      method: "PATCH",
+      body: JSON.stringify({ slug, password }),
+    });
+    modalAprobar.classList.add("hidden");
+    setMsg(solicitudMsg, `Club "${data.nombre}" dado de alta en /${data.slug}.`, false);
+    pendingSolicitudId = null;
+    await loadSolicitudes();
+    await loadClubs();
+  } catch (error) {
+    modalMsg.textContent = error.message;
+    modalMsg.classList.remove("hidden");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Confirmar alta";
+  }
+});
+
+btnRefreshSolicitudes.addEventListener("click", loadSolicitudes);
 
 btnCrearClub.addEventListener("click", async () => {
   const nombre = cfgNombre.value.trim();
@@ -181,5 +329,5 @@ btnCrearClub.addEventListener("click", async () => {
 if (saToken) {
   loginCard.classList.add("hidden");
   saPanel.classList.remove("hidden");
-  loadClubs();
+  Promise.all([loadClubs(), loadSolicitudes()]);
 }

@@ -6,12 +6,12 @@
   <title>Turnos Club</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="min-h-screen bg-gradient-to-br from-slate-100 to-slate-200">
+<body class="min-h-screen bg-slate-100">
 
-  <header class="bg-white border-b border-slate-200 shadow-sm px-6 py-4">
-    <div class="mx-auto max-w-4xl flex items-center gap-3">
-      <!-- App logo -->
-      <svg width="44" height="44" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Navbar -->
+  <nav class="bg-green-950 px-6 py-4">
+    <div class="mx-auto max-w-5xl flex items-center gap-3">
+      <svg width="36" height="36" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
         <rect width="44" height="44" rx="10" fill="#15803d"/>
         <rect x="7" y="13" width="30" height="20" rx="2" stroke="white" stroke-width="2" fill="none"/>
         <line x1="22" y1="13" x2="22" y2="33" stroke="white" stroke-width="2"/>
@@ -19,14 +19,33 @@
         <rect x="7" y="18" width="4" height="10" rx="1" stroke="white" stroke-width="1.5" fill="none"/>
         <rect x="33" y="18" width="4" height="10" rx="1" stroke="white" stroke-width="1.5" fill="none"/>
       </svg>
-      <div>
-        <h1 class="text-2xl font-bold text-slate-800 leading-tight">Turnos Club</h1>
-        <p class="text-xs text-slate-500 leading-tight">Reserva tu cancha en pocos pasos</p>
-      </div>
+      <span class="text-white font-bold text-lg tracking-tight">Turnos Club</span>
     </div>
-  </header>
+  </nav>
 
-  <main class="mx-auto max-w-4xl px-4 py-10">
+  <!-- Hero -->
+  <section class="bg-gradient-to-br from-green-950 via-green-900 to-green-800 text-white px-6 pt-14 pb-16 text-center">
+    <p class="text-green-400 text-sm font-semibold uppercase tracking-widest mb-3">Directorio de clubs deportivos</p>
+    <h1 class="text-4xl sm:text-5xl font-extrabold mb-4 leading-tight">Encontrá tu cancha.<br/>Reservá en segundos.</h1>
+    <p class="text-green-200 text-base sm:text-lg mb-10 max-w-md mx-auto">
+      Buscá el club más cercano, elegí horario y confirmá tu turno sin llamar a nadie.
+    </p>
+
+    <!-- Buscador -->
+    <div class="mx-auto max-w-md relative">
+      <svg class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input id="searchInput" type="search" placeholder="Buscar club..."
+             class="w-full rounded-xl bg-white text-slate-800 pl-11 pr-4 py-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 shadow-lg" />
+    </div>
+  </section>
+
+  <!-- Clubs -->
+  <main class="mx-auto max-w-5xl px-4 py-10 space-y-6">
+
+    <!-- Filtros por deporte -->
+    <div id="sportFilters" class="hidden flex gap-2 flex-wrap"></div>
 
     <div id="loading" class="text-center text-slate-400 py-20">
       <div class="inline-block w-6 h-6 border-2 border-slate-300 border-t-green-600 rounded-full animate-spin mb-3"></div>
@@ -45,6 +64,19 @@
     <div id="clubsGrid" class="hidden grid gap-5 sm:grid-cols-2 lg:grid-cols-3"></div>
 
   </main>
+
+  <!-- CTA para clubs -->
+  <section class="bg-green-950 mt-10 py-14 px-6 text-center">
+    <p class="text-green-400 text-xs font-semibold uppercase tracking-widest mb-3">¿Tenés un club deportivo?</p>
+    <h2 class="text-2xl sm:text-3xl font-extrabold text-white mb-3">Publicalo en Turnos Club</h2>
+    <p class="text-green-200 text-sm max-w-md mx-auto mb-8">
+      Empezá a recibir reservas online, gestioná tus canchas y confirmá turnos desde cualquier dispositivo.
+    </p>
+    <a href="/registro"
+       class="inline-block rounded-xl bg-green-500 hover:bg-green-400 transition-colors px-8 py-3 text-sm font-bold text-white shadow-lg">
+      Registrar mi club →
+    </a>
+  </section>
 
   <script src="/home.js"></script>
 </body>
