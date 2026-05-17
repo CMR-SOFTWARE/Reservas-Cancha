@@ -212,7 +212,10 @@ async function refreshHorarios() {
   if ([...canchaSelect.options].some((o) => o.value === prevCancha)) {
     canchaSelect.value = prevCancha;
   }
-  await Promise.all([loadReservas(), loadBloqueos()]);
+  await Promise.all([
+    loadReservas().catch(() => { reservasActuales = []; }),
+    loadBloqueos().catch(() => { bloqueosActuales = []; }),
+  ]);
   renderHorarios();
 }
 
