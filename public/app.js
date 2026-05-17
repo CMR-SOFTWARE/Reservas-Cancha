@@ -235,6 +235,16 @@ btnBuscar.addEventListener("click", async () => {
   catch (error) { setMensaje(error.message || "Error al cargar horarios."); }
 });
 
+canchaSelect.addEventListener("change", async () => {
+  try { await refreshHorarios(); }
+  catch (error) { setMensaje(error.message || "Error al cargar horarios."); }
+});
+
+fechaInput.addEventListener("change", async () => {
+  try { await refreshHorarios(); }
+  catch (error) { setMensaje(error.message || "Error al cargar horarios."); }
+});
+
 telefonoInput.addEventListener("input", () => {
   telefonoInput.value = telefonoInput.value.replace(/\D/g, "");
 });
@@ -293,7 +303,6 @@ async function init() {
   fechaInput.min = todayISO();
   fechaInput.value = todayISO();
   try {
-    await loadConfig();
     await refreshHorarios();
   } catch (error) { setMensaje(error.message || "Error inicializando la aplicacion."); }
 }
