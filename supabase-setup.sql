@@ -51,6 +51,7 @@ create table if not exists reservas (
   cancha text not null,
   fecha text not null,
   horario text not null,
+  estado text not null default 'pendiente',
   comprobante_nombre_original text not null,
   comprobante_archivo text not null,
   comprobante_mimetype text not null,
@@ -72,9 +73,23 @@ create table if not exists bloqueos (
   creado_en text not null
 );
 
+-- Solicitudes de registro de nuevos clubs
+create table if not exists solicitudes (
+  id bigserial primary key,
+  nombre text not null,
+  slug text not null,
+  deporte text not null default 'futbol',
+  whatsapp text not null,
+  email text not null,
+  comprobante_url text,
+  estado text not null default 'pendiente',
+  creado_en text not null
+);
+
 -- RLS deshabilitado (el backend usa service key y controla el acceso)
 alter table clubs disable row level security;
 alter table canchas disable row level security;
 alter table admins disable row level security;
 alter table reservas disable row level security;
 alter table bloqueos disable row level security;
+alter table solicitudes disable row level security;

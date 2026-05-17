@@ -52,7 +52,11 @@ async function api(url, options = {}) {
     },
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || "Error de servidor.");
+  if (!response.ok) {
+    const err = new Error(data.error || "Error de servidor.");
+    err.status = response.status;
+    throw err;
+  }
   return data;
 }
 
@@ -99,8 +103,8 @@ function whatsappHref(r) {
 
 function estadoBadge(estado) {
   const estilos = {
-    pendiente: "bg-amber-100 text-amber-800",
-    confirmada: "bg-emerald-100 text-emerald-800",
+    pendiente: "bg-amber-100 text-amber-800 border border-amber-200",
+    confirmada: "bg-green-100 text-green-800 border border-green-200",
   };
   const labels = { pendiente: "Pendiente", confirmada: "Confirmada" };
   const cls = estilos[estado] || estilos.pendiente;
@@ -116,7 +120,7 @@ function renderReservas(reservas) {
     return 0;
   });
   reservasList.innerHTML = sorted.map((r) => `
-    <article class="rounded-lg border border-slate-200 bg-slate-50 p-3">
+    <article class="rounded-lg border border-green-100 bg-white p-3 shadow-sm">
       <div class="mb-1 flex items-center gap-2">
         ${estadoBadge(r.estado)}
         <strong>${r.nombre}</strong> — ${r.telefono}
@@ -124,13 +128,13 @@ function renderReservas(reservas) {
       <p class="text-sm text-slate-600">${getCanchaEtiqueta(r.cancha)} · ${formatFecha(r.fecha)} · ${r.horario}</p>
       <p class="mt-1">
         <a href="${r.comprobanteUrl}" target="_blank" rel="noopener noreferrer"
-           class="text-sm text-blue-600 underline">Ver comprobante</a>
+           class="text-sm text-green-700 underline hover:text-green-900">Ver comprobante</a>
       </p>
       <div class="mt-2 flex flex-wrap gap-2">
         ${r.estado === "pendiente"
-          ? `<button class="rounded-lg bg-emerald-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-800"
+          ? `<button class="rounded-lg bg-green-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-green-800"
                data-action="confirmar" data-id="${r.id}" type="button">Confirmar</button>`
-          : `<button class="rounded-lg bg-slate-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-slate-600"
+          : `<button class="rounded-lg bg-green-900 px-3 py-1.5 text-sm font-semibold text-white hover:bg-green-950"
                data-action="revertir" data-id="${r.id}" type="button">Marcar pendiente</button>`}
         <a href="${whatsappHref(r)}" target="_blank" rel="noopener noreferrer"
            class="rounded-lg bg-green-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-green-700">
@@ -146,10 +150,10 @@ function renderReservas(reservas) {
 function renderBloqueos(bloqueos) {
   if (!bloqueos.length) { bloqueosList.innerHTML = "<p>No hay bloqueos activos.</p>"; return; }
   bloqueosList.innerHTML = bloqueos.map((b) => `
-    <article class="rounded-lg border border-slate-200 bg-slate-50 p-3">
+    <article class="rounded-lg border border-amber-100 bg-amber-50 p-3">
       <p><strong>${getCanchaEtiqueta(b.cancha)}</strong> - ${formatFecha(b.fecha)}</p>
-      <p>${describeBloqueoHorario(b)}</p>
-      <p>Motivo: ${b.motivo}</p>
+      <p class="text-sm text-amber-800">${describeBloqueoHorario(b)}</p>
+      <p class="text-sm text-slate-600">Motivo: ${b.motivo}</p>
       <button class="mt-1 rounded-lg bg-red-700 px-3 py-2 font-semibold text-white hover:bg-red-800"
         data-action="quitar-bloqueo" data-id="${b.id}" type="button">
         Quitar bloqueo
@@ -342,10 +346,10 @@ async function loadCanchas() {
     return;
   }
   canchasList.innerHTML = canchas.map((c) => `
-    <div class="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2" data-cancha-id="${c.id}">
-      <span class="font-mono text-sm bg-slate-200 rounded px-2 py-0.5">${c.nombre}</span>
-      <input type="text" value="${c.etiqueta}" class="flex-1 rounded border border-slate-300 px-2 py-1 text-sm cancha-etiqueta-input" data-id="${c.id}" />
-      <button class="rounded bg-blue-600 px-2 py-1 text-xs font-semibold text-white hover:bg-blue-700"
+    <div class="flex items-center gap-2 rounded-lg border border-green-100 bg-green-50 px-3 py-2" data-cancha-id="${c.id}">
+      <span class="font-mono text-sm bg-green-200 text-green-900 rounded px-2 py-0.5">${c.nombre}</span>
+      <input type="text" value="${c.etiqueta}" class="flex-1 rounded border border-slate-300 px-2 py-1 text-sm cancha-etiqueta-input focus:outline-none focus:ring-1 focus:ring-green-500" data-id="${c.id}" />
+      <button class="rounded bg-green-700 px-2 py-1 text-xs font-semibold text-white hover:bg-green-800"
         data-action="renombrar-cancha" data-id="${c.id}" type="button">Guardar</button>
       <button class="rounded bg-red-600 px-2 py-1 text-xs font-semibold text-white hover:bg-red-700"
         data-action="eliminar-cancha" data-id="${c.id}" type="button">Eliminar</button>
@@ -454,9 +458,14 @@ async function init() {
       setAuthenticatedUI(true);
       await refreshAdminData();
       return;
-    } catch (_) {
-      adminToken = "";
-      localStorage.removeItem("adminToken");
+    } catch (err) {
+      if (err.status === 401) {
+        adminToken = "";
+        localStorage.removeItem("adminToken");
+      } else {
+        setMessage(adminMessage, err.message || "Error al cargar datos. Recargá la página.");
+        return;
+      }
     }
   }
   setAuthenticatedUI(false);

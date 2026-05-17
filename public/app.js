@@ -207,6 +207,11 @@ function buildWhatsAppUrl(reserva) {
 
 async function refreshHorarios() {
   if (!fechaInput.value) fechaInput.value = todayISO();
+  const prevCancha = canchaSelect.value;
+  await loadConfig();
+  if ([...canchaSelect.options].some((o) => o.value === prevCancha)) {
+    canchaSelect.value = prevCancha;
+  }
   await Promise.all([loadReservas(), loadBloqueos()]);
   renderHorarios();
 }
