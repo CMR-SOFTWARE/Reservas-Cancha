@@ -70,6 +70,13 @@ function logoPreview(club) {
           </div>`;
 }
 
+const PLAN_LABELS = { inicial: "Inicial", estandar: "Estándar", max: "Max" };
+const PLAN_BADGE = {
+  inicial: "bg-slate-100 text-slate-600",
+  estandar: "bg-blue-100 text-blue-700",
+  max: "bg-violet-100 text-violet-700",
+};
+
 async function loadClubs() {
   clubsList.textContent = "Cargando...";
   try {
@@ -78,7 +85,9 @@ async function loadClubs() {
       clubsList.innerHTML = "<p class='text-slate-400 text-sm'>No hay clubs registrados.</p>";
       return;
     }
-    clubsList.innerHTML = clubs.map((c) => `
+    clubsList.innerHTML = clubs.map((c) => {
+      const plan = c.plan || "inicial";
+      return `
       <div class="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
         <div class="flex items-center gap-3">
           ${logoPreview(c)}
@@ -86,7 +95,10 @@ async function loadClubs() {
             <div class="font-semibold text-slate-800 truncate">${c.nombre}</div>
             <div class="text-xs text-slate-400 font-mono">/${c.slug}</div>
           </div>
-          <div class="flex items-center gap-2 flex-shrink-0">
+          <div class="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
+            <span class="text-xs font-semibold px-2 py-0.5 rounded-full ${PLAN_BADGE[plan] || PLAN_BADGE.inicial}">
+              ${PLAN_LABELS[plan] || plan}
+            </span>
             <span class="text-xs font-semibold px-2 py-0.5 rounded-full ${c.activo ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-500"}">
               ${c.activo ? "Activo" : "Inactivo"}
             </span>
@@ -111,8 +123,21 @@ async function loadClubs() {
           <a href="/${c.slug}/admin" target="_blank"
              class="text-xs text-blue-600 hover:underline flex-shrink-0">Admin</a>
         </div>
+        <div class="flex items-center gap-2 pt-1 border-t border-slate-200">
+          <span class="text-xs text-slate-500 shrink-0">Plan:</span>
+          <select class="plan-select flex-1 rounded border border-slate-300 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-500"
+                  data-club-id="${c.id}">
+            <option value="inicial" ${plan === "inicial" ? "selected" : ""}>Inicial — hasta 2 canchas</option>
+            <option value="estandar" ${plan === "estandar" ? "selected" : ""}>Estándar — hasta 5 canchas</option>
+            <option value="max" ${plan === "max" ? "selected" : ""}>Max — hasta 10 canchas</option>
+          </select>
+          <button class="rounded-lg bg-green-700 px-3 py-1 text-xs font-semibold text-white hover:bg-green-800 shrink-0"
+                  data-action="cambiar-plan" data-club-id="${c.id}">
+            Guardar plan
+          </button>
+        </div>
       </div>
-    `).join("");
+    `}).join("");
 
     clubsList.addEventListener("click", handleClubListClick, { once: true });
   } catch (error) {
@@ -168,6 +193,28 @@ async function handleClubListClick(event) {
     return;
   }
 
+  if (action === "cambiar-plan") {
+    const select = clubsList.querySelector(`.plan-select[data-club-id="${clubId}"]`);
+    const plan = select?.value;
+    if (!plan) { clubsList.addEventListener("click", handleClubListClick, { once: true }); return; }
+    try {
+      target.disabled = true;
+      target.textContent = "Guardando...";
+      await api(`/api/superadmin/clubs/${clubId}/plan`, {
+        method: "PATCH",
+        body: JSON.stringify({ plan }),
+      });
+      setMsg(logoMsg, "Plan actualizado correctamente.", false);
+      await loadClubs();
+    } catch (error) {
+      setMsg(logoMsg, error.message || "No se pudo cambiar el plan.");
+      target.disabled = false;
+      target.textContent = "Guardar plan";
+      clubsList.addEventListener("click", handleClubListClick, { once: true });
+    }
+    return;
+  }
+
   clubsList.addEventListener("click", handleClubListClick, { once: true });
 }
 
@@ -209,7 +256,7 @@ async function loadSolicitudes() {
           <div>
             <div class="font-semibold text-slate-800">${s.nombre}</div>
             <div class="text-xs text-slate-400">${s.email} · WA: ${s.whatsapp} · <span class="capitalize">${s.deporte}</span></div>
-            <div class="text-xs text-slate-400 font-mono">slug sugerido: /${s.slug}</div>
+            <div class="text-xs text-slate-400 font-mono">slug sugerido: /${s.slug} · Plan: <strong>${PLAN_LABELS[s.plan] || s.plan || "Inicial"}</strong></div>
           </div>
           <span class="text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${ESTADO_BADGE[s.estado] || ''}">
             ${s.estado.charAt(0).toUpperCase() + s.estado.slice(1)}
@@ -219,7 +266,7 @@ async function loadSolicitudes() {
         ${s.estado === "pendiente" ? `
         <div class="flex gap-2 pt-1">
           <button class="rounded-lg bg-green-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-800"
-                  data-sol-action="aprobar" data-sol-id="${s.id}" data-sol-slug="${s.slug}">
+                  data-sol-action="aprobar" data-sol-id="${s.id}" data-sol-slug="${s.slug}" data-sol-plan="${s.plan || 'inicial'}">
             Aprobar
           </button>
           <button class="rounded-lg bg-red-100 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-200"
@@ -248,6 +295,8 @@ async function handleSolicitudClick(event) {
     modalSlug.value = btn.dataset.solSlug || "";
     modalPassword.value = "";
     modalMsg.classList.add("hidden");
+    const modalPlan = document.getElementById("modalPlan");
+    if (modalPlan) modalPlan.value = btn.dataset.solPlan || "inicial";
     modalAprobar.classList.remove("hidden");
     return;
   }
@@ -281,13 +330,14 @@ document.getElementById("btnConfirmarAprobar").addEventListener("click", async (
   if (!slug) { modalMsg.textContent = "El slug es requerido."; modalMsg.classList.remove("hidden"); return; }
   if (!password) { modalMsg.textContent = "La clave admin es requerida."; modalMsg.classList.remove("hidden"); return; }
 
+  const plan = document.getElementById("modalPlan")?.value || "inicial";
   const btn = document.getElementById("btnConfirmarAprobar");
   try {
     btn.disabled = true;
     btn.textContent = "Procesando...";
     const data = await api(`/api/superadmin/solicitudes/${pendingSolicitudId}/aprobar`, {
       method: "PATCH",
-      body: JSON.stringify({ slug, password }),
+      body: JSON.stringify({ slug, password, plan }),
     });
     modalAprobar.classList.add("hidden");
     setMsg(solicitudMsg, `Club "${data.nombre}" dado de alta en /${data.slug}.`, false);

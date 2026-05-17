@@ -69,6 +69,13 @@ const SUBSCRIPTION_ALIAS = process.env.SUBSCRIPTION_TRANSFER_ALIAS || "";
 const SUBSCRIPTION_CBU = process.env.SUBSCRIPTION_TRANSFER_CBU || "";
 const SUBSCRIPTION_TITULAR = process.env.SUBSCRIPTION_TRANSFER_TITULAR || "";
 
+const PLANES = {
+  inicial:  { nombre: "Inicial",  maxCanchas: 2,  precio: 50000 },
+  estandar: { nombre: "Estándar", maxCanchas: 5,  precio: 80000 },
+  max:      { nombre: "Max",      maxCanchas: 10, precio: 100000 },
+};
+function getMaxCanchas(plan) { return PLANES[plan]?.maxCanchas ?? 2; }
+
 const db = USE_SQLITE ? new sqlite3.Database(DB_FILE) : null;
 
 // ============================================================
@@ -209,6 +216,18 @@ async function initDb() {
       creado_en TEXT NOT NULL
     )
   `);
+
+  const clubCols = await dbAll("PRAGMA table_info(clubs)");
+  const clubColSet = new Set(clubCols.map((c) => c.name));
+  if (!clubColSet.has("plan")) {
+    await dbRun("ALTER TABLE clubs ADD COLUMN plan TEXT NOT NULL DEFAULT 'inicial'");
+  }
+
+  const solCols = await dbAll("PRAGMA table_info(solicitudes)");
+  const solColSet = new Set(solCols.map((c) => c.name));
+  if (!solColSet.has("plan")) {
+    await dbRun("ALTER TABLE solicitudes ADD COLUMN plan TEXT NOT NULL DEFAULT 'inicial'");
+  }
 }
 
 // ============================================================
@@ -296,6 +315,7 @@ function requireSuperAdmin(req, res, next) {
 // CLUB DATA ACCESS
 // ============================================================
 function mapClubRow(clubRow, canchaRows) {
+  const plan = clubRow.plan || "inicial";
   return {
     id: clubRow.id,
     slug: clubRow.slug,
@@ -311,6 +331,8 @@ function mapClubRow(clubRow, canchaRows) {
     horaInicio: Number(clubRow.hora_inicio),
     horaFin: Number(clubRow.hora_fin),
     precio: clubRow.precio,
+    plan,
+    maxCanchas: getMaxCanchas(plan),
     canchas: (canchaRows || []).map((c) => ({ nombre: c.nombre, etiqueta: c.etiqueta })),
   };
 }
@@ -716,6 +738,8 @@ app.get("/api/:slug/config", resolveClub, (req, res) => {
     horaInicio: club.horaInicio,
     horaFin: club.horaFin,
     precio: club.precio,
+    plan: club.plan,
+    maxCanchas: club.maxCanchas,
     transferencia: club.transferencia,
     whatsappNumero: club.whatsapp,
   });
@@ -980,11 +1004,24 @@ app.post("/api/:slug/admin/canchas", resolveClub, requireAdmin, async (req, res,
     if (!nombre) return res.status(400).json({ error: "El nombre de la cancha es obligatorio." });
     if (!etiqueta) return res.status(400).json({ error: "La etiqueta de la cancha es obligatoria." });
 
+    const plan = req.club.plan || "inicial";
+    const maxCanchas = getMaxCanchas(plan);
+    const planNombre = PLANES[plan]?.nombre || plan;
+
     if (USE_SUPABASE) {
+      const { count } = await supabase.from("canchas").select("id", { count: "exact", head: true })
+        .eq("club_id", clubId).eq("activa", true);
+      if (count >= maxCanchas) {
+        return res.status(403).json({ error: `Tu plan ${planNombre} permite hasta ${maxCanchas} cancha${maxCanchas === 1 ? "" : "s"}. Contactanos para cambiar de plan.` });
+      }
       const { data, error } = await supabase.from("canchas")
         .insert({ club_id: clubId, nombre, etiqueta, activa: true }).select().single();
       if (error) return res.status(409).json({ error: "Ya existe una cancha con ese nombre." });
       return res.json({ id: data.id, nombre: data.nombre, etiqueta: data.etiqueta, activa: data.activa });
+    }
+    const countRow = await dbGet("SELECT COUNT(*) as cnt FROM canchas WHERE club_id = ? AND activa = 1", [clubId]);
+    if ((countRow?.cnt || 0) >= maxCanchas) {
+      return res.status(403).json({ error: `Tu plan ${planNombre} permite hasta ${maxCanchas} cancha${maxCanchas === 1 ? "" : "s"}. Contactanos para cambiar de plan.` });
     }
     const result = await dbRun(
       "INSERT OR IGNORE INTO canchas (club_id, nombre, etiqueta, activa) VALUES (?, ?, ?, 1)",
@@ -1167,13 +1204,13 @@ app.post("/api/superadmin/login", async (req, res, next) => {
 app.get("/api/superadmin/clubs", requireSuperAdmin, async (_req, res, next) => {
   try {
     if (USE_SQLITE) {
-      const rows = await dbAll("SELECT id, slug, nombre, activo, creado_en FROM clubs ORDER BY id ASC");
-      return res.json(rows);
+      const rows = await dbAll("SELECT id, slug, nombre, activo, plan, creado_en FROM clubs ORDER BY id ASC");
+      return res.json(rows.map((r) => ({ ...r, plan: r.plan || "inicial" })));
     }
     if (USE_SUPABASE) {
-      const { data, error } = await supabase.from("clubs").select("id, slug, nombre, activo, creado_en").order("id");
+      const { data, error } = await supabase.from("clubs").select("id, slug, nombre, activo, plan, creado_en").order("id");
       if (error) throw new Error(error.message);
-      return res.json(data || []);
+      return res.json((data || []).map((r) => ({ ...r, plan: r.plan || "inicial" })));
     }
     return res.json([]);
   } catch (error) { next(error); }
@@ -1226,6 +1263,26 @@ app.post("/api/superadmin/clubs", requireSuperAdmin, async (req, res, next) => {
       return res.status(201).json({ ok: true, slug: rawSlug, nombre });
     }
     return res.status(503).json({ error: "No hay backend de datos disponible." });
+  } catch (error) { next(error); }
+});
+
+app.patch("/api/superadmin/clubs/:id/plan", requireSuperAdmin, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const plan = (req.body?.plan || "").trim();
+    if (!PLANES[plan]) return res.status(400).json({ error: "Plan inválido." });
+    if (USE_SQLITE) {
+      const row = await dbGet("SELECT id FROM clubs WHERE id = ? LIMIT 1", [id]);
+      if (!row) return res.status(404).json({ error: "Club no encontrado." });
+      await dbRun("UPDATE clubs SET plan = ? WHERE id = ?", [plan, id]);
+      return res.json({ ok: true, plan });
+    }
+    if (USE_SUPABASE) {
+      const { error } = await supabase.from("clubs").update({ plan }).eq("id", id);
+      if (error) throw new Error(error.message);
+      return res.json({ ok: true, plan });
+    }
+    return res.status(503).json({ error: "No hay backend disponible." });
   } catch (error) { next(error); }
 });
 
@@ -1293,12 +1350,27 @@ app.get("/api/suscripcion", (_req, res) => {
   });
 });
 
+app.get("/api/planes", (_req, res) => {
+  res.json(
+    Object.entries(PLANES).map(([id, p]) => ({
+      id,
+      nombre: p.nombre,
+      maxCanchas: p.maxCanchas,
+      precio: p.precio,
+      alias: SUBSCRIPTION_ALIAS,
+      cbu: SUBSCRIPTION_CBU,
+      titular: SUBSCRIPTION_TITULAR,
+    }))
+  );
+});
+
 app.post("/api/solicitudes", upload.single("comprobante"), async (req, res, next) => {
   try {
     const nombre = (req.body?.nombre || "").trim();
     const deporte = (req.body?.deporte || "futbol").trim();
     const whatsapp = (req.body?.whatsapp || "").trim().replace(/\D/g, "");
     const email = (req.body?.email || "").trim().toLowerCase();
+    const plan = PLANES[req.body?.plan] ? req.body.plan : "inicial";
 
     if (!nombre || !whatsapp || !email) {
       return res.status(400).json({ error: "Nombre, WhatsApp y email son requeridos." });
@@ -1323,9 +1395,9 @@ app.post("/api/solicitudes", upload.single("comprobante"), async (req, res, next
       await fs.writeFile(path.join(SOLICITUDES_DIR, filename), req.file.buffer || await fs.readFile(req.file.path));
       comprobanteUrl = `/uploads/solicitudes/${filename}`;
       const result = await dbRun(
-        `INSERT INTO solicitudes (nombre, slug, deporte, whatsapp, email, comprobante_url, estado, creado_en)
-         VALUES (?, ?, ?, ?, ?, ?, 'pendiente', ?)`,
-        [nombre, slug, deporte, whatsapp, email, comprobanteUrl, now]
+        `INSERT INTO solicitudes (nombre, slug, deporte, whatsapp, email, comprobante_url, plan, estado, creado_en)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'pendiente', ?)`,
+        [nombre, slug, deporte, whatsapp, email, comprobanteUrl, plan, now]
       );
       return res.status(201).json({ ok: true, id: result.lastID });
     }
@@ -1339,7 +1411,7 @@ app.post("/api/solicitudes", upload.single("comprobante"), async (req, res, next
       const { data: urlData } = supabase.storage.from(SUPABASE_BUCKET).getPublicUrl(filename);
       comprobanteUrl = urlData?.publicUrl || null;
       const { data, error } = await supabase.from("solicitudes").insert({
-        nombre, slug, deporte, whatsapp, email, comprobante_url: comprobanteUrl, estado: "pendiente", creado_en: now,
+        nombre, slug, deporte, whatsapp, email, comprobante_url: comprobanteUrl, plan, estado: "pendiente", creado_en: now,
       }).select().single();
       if (error) throw new Error(error.message);
       return res.status(201).json({ ok: true, id: data.id });
@@ -1383,11 +1455,12 @@ app.patch("/api/superadmin/solicitudes/:id/aprobar", requireSuperAdmin, async (r
       const existing = await dbGet("SELECT id FROM clubs WHERE slug = ? LIMIT 1", [slug]);
       if (existing) return res.status(409).json({ error: `Ya existe un club con el slug "${slug}".` });
 
+      const solPlan = PLANES[sol.plan] ? sol.plan : "inicial";
       const result = await dbRun(
         `INSERT INTO clubs (slug, nombre, deporte, whatsapp, transfer_alias, transfer_cbu, transfer_titular,
-          hora_inicio, hora_fin, precio, activo, creado_en)
-         VALUES (?, ?, ?, ?, '', '', '', 10, 23, '0', 1, ?)`,
-        [slug, sol.nombre, sol.deporte, sol.whatsapp, now]
+          hora_inicio, hora_fin, precio, plan, activo, creado_en)
+         VALUES (?, ?, ?, ?, '', '', '', 10, 23, '0', ?, 1, ?)`,
+        [slug, sol.nombre, sol.deporte, sol.whatsapp, solPlan, now]
       );
       await dbRun(
         "INSERT INTO admins (club_id, password_salt, password_hash, actualizado_en) VALUES (?, ?, ?, ?)",
@@ -1405,10 +1478,11 @@ app.patch("/api/superadmin/solicitudes/:id/aprobar", requireSuperAdmin, async (r
       const { data: existing } = await supabase.from("clubs").select("id").eq("slug", slug).maybeSingle();
       if (existing) return res.status(409).json({ error: `Ya existe un club con el slug "${slug}".` });
 
+      const solPlan = PLANES[sol.plan] ? sol.plan : "inicial";
       const { data: club, error: clubErr } = await supabase.from("clubs").insert({
         slug, nombre: sol.nombre, deporte: sol.deporte, whatsapp: sol.whatsapp,
         transfer_alias: "", transfer_cbu: "", transfer_titular: "",
-        hora_inicio: 10, hora_fin: 23, precio: "0", activo: true, creado_en: now,
+        hora_inicio: 10, hora_fin: 23, precio: "0", plan: solPlan, activo: true, creado_en: now,
       }).select().single();
       if (clubErr) throw new Error(clubErr.message);
 

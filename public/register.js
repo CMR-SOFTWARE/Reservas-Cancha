@@ -16,6 +16,12 @@ const msg1 = document.getElementById("msg1");
 const comprobanteInput = document.getElementById("comprobante");
 const msg2 = document.getElementById("msg2");
 
+const PLANES = {
+  inicial:  { nombre: "Inicial",  maxCanchas: 2,  precio: 50000 },
+  estandar: { nombre: "Estándar", maxCanchas: 5,  precio: 80000 },
+  max:      { nombre: "Max",      maxCanchas: 10, precio: 100000 },
+};
+
 let datosClub = {};
 
 function toSlug(str) {
@@ -27,9 +33,38 @@ function toSlug(str) {
     .slice(0, 50);
 }
 
+// Plan selector visual
+function getSelectedPlan() {
+  const checked = document.querySelector('input[name="plan"]:checked');
+  return checked ? checked.value : "inicial";
+}
+
+function selectPlan(value) {
+  document.querySelectorAll('input[name="plan"]').forEach((radio) => {
+    const card = radio.nextElementSibling;
+    if (radio.value === value) {
+      radio.checked = true;
+      card.classList.add("border-green-600", "bg-green-50");
+      card.classList.remove("border-slate-200", "bg-slate-50");
+    } else {
+      radio.checked = false;
+      card.classList.remove("border-green-600", "bg-green-50");
+      card.classList.add("border-slate-200", "bg-slate-50");
+    }
+  });
+}
+
+document.getElementById("planSelector").addEventListener("change", (e) => {
+  if (e.target.name === "plan") selectPlan(e.target.value);
+});
+
+// Pre-seleccionar plan desde ?plan= en la URL
+const urlPlan = new URLSearchParams(window.location.search).get("plan") || "inicial";
+selectPlan(PLANES[urlPlan] ? urlPlan : "inicial");
+
 nombreInput.addEventListener("input", () => {
   const slug = toSlug(nombreInput.value);
-  slugPreview.textContent = slug ? `turnos.club/${slug}` : "—";
+  slugPreview.textContent = slug ? `cmrcanchas.com/${slug}` : "—";
 });
 
 function showMsg(el, text) {
@@ -49,20 +84,26 @@ document.getElementById("btnSiguiente").addEventListener("click", async () => {
   const deporte = deporteInput.value;
   const whatsapp = whatsappInput.value.trim().replace(/\D/g, "");
   const email = emailInput.value.trim();
+  const plan = getSelectedPlan();
 
   if (!nombre) return showMsg(msg1, "El nombre del club es requerido.");
   if (!whatsapp || whatsapp.length < 8) return showMsg(msg1, "Ingresá un número de WhatsApp válido.");
   if (!email || !email.includes("@")) return showMsg(msg1, "Ingresá un email válido.");
 
-  datosClub = { nombre, deporte, whatsapp: "549" + whatsapp, email };
+  datosClub = { nombre, deporte, whatsapp: "549" + whatsapp, email, plan };
+
+  const planInfo = PLANES[plan];
+  document.getElementById("precioSub").textContent = planInfo.precio.toLocaleString("es-AR");
 
   try {
-    const res = await fetch("/api/suscripcion");
-    const sub = await res.json();
-    document.getElementById("precioSub").textContent = Number(sub.precio).toLocaleString("es-AR");
-    document.getElementById("aliasSub").textContent = sub.alias || "—";
-    document.getElementById("cbuSub").textContent = sub.cbu || "—";
-    document.getElementById("titularSub").textContent = sub.titular || "—";
+    const res = await fetch("/api/planes");
+    const planes = await res.json();
+    const p = planes.find((x) => x.id === plan);
+    if (p) {
+      document.getElementById("aliasSub").textContent = p.alias || "—";
+      document.getElementById("cbuSub").textContent = p.cbu || "—";
+      document.getElementById("titularSub").textContent = p.titular || "—";
+    }
   } catch (_) {}
 
   paso1.classList.add("hidden");
@@ -88,6 +129,7 @@ document.getElementById("btnEnviar").addEventListener("click", async () => {
   formData.append("deporte", datosClub.deporte);
   formData.append("whatsapp", datosClub.whatsapp);
   formData.append("email", datosClub.email);
+  formData.append("plan", datosClub.plan);
   formData.append("comprobante", comprobanteInput.files[0]);
 
   try {

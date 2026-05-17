@@ -339,13 +339,30 @@ function fillClubForm(cfg) {
   cfgTitular.value = cfg.transferencia?.titular || "";
 }
 
+const PLAN_LABEL = { inicial: "Inicial", estandar: "Estándar", max: "Max" };
+
 async function loadCanchas() {
   const canchas = await api(`/api/${CLUB_SLUG}/admin/canchas`);
+  const plan = config?.plan || "inicial";
+  const maxCanchas = config?.maxCanchas ?? 2;
+  const planNombre = PLAN_LABEL[plan] || plan;
+  const activas = canchas.filter((c) => c.activa !== false).length;
+  const atLimit = activas >= maxCanchas;
+
+  const planBadge = `
+    <div class="flex items-center justify-between mb-2">
+      <span class="text-xs font-semibold text-slate-500">
+        Plan <strong class="text-slate-700">${planNombre}</strong> — ${activas}/${maxCanchas} cancha${maxCanchas === 1 ? "" : "s"}
+      </span>
+      ${atLimit ? `<span class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">Límite alcanzado</span>` : ""}
+    </div>
+  `;
+
   if (!canchas.length) {
-    canchasList.innerHTML = "<p class='text-slate-500 text-sm'>No hay canchas cargadas.</p>";
+    canchasList.innerHTML = planBadge + "<p class='text-slate-500 text-sm'>No hay canchas cargadas.</p>";
     return;
   }
-  canchasList.innerHTML = canchas.map((c) => `
+  canchasList.innerHTML = planBadge + canchas.map((c) => `
     <div class="flex items-center gap-2 rounded-lg border border-green-100 bg-green-50 px-3 py-2" data-cancha-id="${c.id}">
       <span class="font-mono text-sm bg-green-200 text-green-900 rounded px-2 py-0.5">${c.nombre}</span>
       <input type="text" value="${c.etiqueta}" class="flex-1 rounded border border-slate-300 px-2 py-1 text-sm cancha-etiqueta-input focus:outline-none focus:ring-1 focus:ring-green-500" data-id="${c.id}" />

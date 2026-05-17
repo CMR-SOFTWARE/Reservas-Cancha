@@ -18,6 +18,7 @@ create table if not exists clubs (
   hora_fin integer not null default 23,
   precio text not null default '0',
   activo boolean not null default true,
+  plan text not null default 'inicial',
   creado_en text not null
 );
 
@@ -82,6 +83,7 @@ create table if not exists solicitudes (
   whatsapp text not null,
   email text not null,
   comprobante_url text,
+  plan text not null default 'inicial',
   estado text not null default 'pendiente',
   creado_en text not null
 );
