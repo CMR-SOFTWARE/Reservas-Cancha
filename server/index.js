@@ -848,6 +848,43 @@ app.get("/api/:slug/bloqueos", resolveClub, async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+app.get("/api/:slug/mis-reservas", resolveClub, async (req, res, next) => {
+  try {
+    const telefono = (req.query.telefono || "").replace(/\D/g, "");
+    if (!telefono || telefono.length < 6 || telefono.length > 15) {
+      return res.status(400).json({ error: "Teléfono inválido." });
+    }
+    const now = new Date();
+    const tz = now.getTimezoneOffset() * 60000;
+    const todayStr = new Date(now - tz).toISOString().split("T")[0];
+    let reservas;
+    if (USE_SUPABASE) {
+      const { data, error } = await supabase
+        .from("reservas")
+        .select("cancha, fecha, horario, estado, nombre")
+        .eq("club_id", req.club.id)
+        .eq("telefono", telefono)
+        .gte("fecha", todayStr)
+        .order("fecha", { ascending: true })
+        .order("horario", { ascending: true });
+      if (error) throw new Error(error.message);
+      reservas = data;
+    } else {
+      reservas = await dbAll(
+        `SELECT cancha, fecha, horario, estado, nombre FROM reservas WHERE club_id = ? AND telefono = ? AND fecha >= ? ORDER BY fecha ASC, horario ASC`,
+        [req.club.id, telefono, todayStr]
+      );
+    }
+    res.json(reservas.map((r) => ({
+      cancha: r.cancha,
+      fecha: r.fecha,
+      horario: r.horario,
+      estado: r.estado,
+      nombre: r.nombre,
+    })));
+  } catch (error) { next(error); }
+});
+
 app.post("/api/:slug/reservas", resolveClub, upload.single("comprobante"), async (req, res, next) => {
   try {
     await purgeExpiredReservas(req.club.id);

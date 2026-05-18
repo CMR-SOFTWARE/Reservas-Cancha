@@ -177,6 +177,7 @@ function openModal(horario) {
   reservaSeleccion.textContent = `${seleccion.canchaEtiqueta} - ${formatFecha(seleccion.fecha)} - ${seleccion.horario}`;
   paso1.classList.remove("hidden");
   paso2.classList.add("hidden");
+  document.getElementById("paso3").classList.add("hidden");
   setMensaje("");
   modal.classList.remove("hidden");
 }
@@ -186,6 +187,9 @@ function closeModal() {
   formReserva.reset();
   seleccion = null;
   setMensaje("");
+  paso1.classList.remove("hidden");
+  paso2.classList.add("hidden");
+  document.getElementById("paso3").classList.add("hidden");
 }
 
 function validarPaso1() {
@@ -304,12 +308,82 @@ formReserva.addEventListener("submit", async (event) => {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "No se pudo guardar la reserva.");
 
-    setMensaje("Reserva guardada. Redirigiendo a WhatsApp...", false);
     await refreshHorarios();
-    const whatsappUrl = buildWhatsAppUrl(data);
-    setTimeout(() => { closeModal(); window.location.href = whatsappUrl; }, 800);
+    showConfirmacion(data);
   } catch (error) { setMensaje(error.message || "Error al reservar."); }
 });
+
+// ── Pantalla de confirmacion ──────────────────────────────────
+
+function showConfirmacion(reserva) {
+  const canchaLabel = seleccion
+    ? seleccion.canchaEtiqueta
+    : (config?.canchas?.find((c) => c.nombre === reserva.cancha)?.etiqueta || `Cancha ${reserva.cancha}`);
+  const detalle = document.getElementById("confirmacionDetalle");
+  if (detalle) {
+    detalle.innerHTML = [
+      `<p><strong>Nombre:</strong> ${escapeHtml(reserva.nombre)}</p>`,
+      `<p><strong>Cancha:</strong> ${escapeHtml(canchaLabel)}</p>`,
+      `<p><strong>Fecha:</strong> ${escapeHtml(formatFecha(reserva.fecha))}</p>`,
+      `<p><strong>Horario:</strong> ${escapeHtml(reserva.horario)}hs</p>`,
+    ].join("");
+  }
+  const btnWa = document.getElementById("btnWhatsAppConfirm");
+  if (btnWa) btnWa.href = buildWhatsAppUrl(reserva);
+  paso1.classList.add("hidden");
+  paso2.classList.add("hidden");
+  document.getElementById("paso3").classList.remove("hidden");
+  setMensaje("");
+}
+
+document.getElementById("btnOtraReserva").addEventListener("click", closeModal);
+
+// ── Mis turnos ────────────────────────────────────────────────
+
+const misTelefonoInput = document.getElementById("misTelefono");
+const btnMisReservas = document.getElementById("btnMisReservas");
+const misTurnosList = document.getElementById("misTurnosList");
+
+misTelefonoInput.addEventListener("input", () => {
+  misTelefonoInput.value = misTelefonoInput.value.replace(/\D/g, "");
+});
+
+misTelefonoInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") btnMisReservas.click();
+});
+
+btnMisReservas.addEventListener("click", async () => {
+  const tel = misTelefonoInput.value.trim();
+  if (!/^\d{6,15}$/.test(tel)) {
+    misTurnosList.innerHTML = `<p class="text-sm text-red-600">Ingresá un número de teléfono válido (solo números).</p>`;
+    return;
+  }
+  misTurnosList.innerHTML = `<p class="text-sm text-slate-400">Buscando...</p>`;
+  try {
+    const response = await fetch(`/api/${CLUB_SLUG}/mis-reservas?telefono=${encodeURIComponent(tel)}`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Error al consultar.");
+    if (!data.length) {
+      misTurnosList.innerHTML = `<p class="text-sm text-slate-500">No se encontraron turnos activos para ese número.</p>`;
+      return;
+    }
+    misTurnosList.innerHTML = data.map((r) => {
+      const canchaLabel = config?.canchas?.find((c) => c.nombre === r.cancha)?.etiqueta || `Cancha ${escapeHtml(r.cancha)}`;
+      const estadoColor = r.estado === "confirmada"
+        ? "border-green-200 bg-green-50 text-green-700"
+        : "border-amber-200 bg-amber-50 text-amber-700";
+      const estadoLabel = r.estado === "confirmada" ? "Pagado" : "Sin pagar";
+      return `<div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+        <p class="font-semibold text-slate-800">${escapeHtml(canchaLabel)} · ${formatFecha(r.fecha)} · ${escapeHtml(r.horario)}hs</p>
+        <span class="mt-1 inline-block rounded-full border px-2 py-0.5 text-xs font-semibold ${estadoColor}">${estadoLabel}</span>
+      </div>`;
+    }).join("");
+  } catch (e) {
+    misTurnosList.innerHTML = `<p class="text-sm text-red-600">${escapeHtml(e.message)}</p>`;
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
 
 async function init() {
   fechaInput.min = todayISO();
