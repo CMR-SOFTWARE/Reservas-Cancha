@@ -1,9 +1,17 @@
-// Extrae el slug del club desde la URL: "/cmr-futbol/admin" -> "cmr-futbol"
 function getClubSlug() {
   const parts = window.location.pathname.split("/").filter(Boolean);
   return parts[0] || "";
 }
 const CLUB_SLUG = getClubSlug();
+
+function escapeHtml(str) {
+  return String(str ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
 const loginCard = document.getElementById("loginCard");
 const adminPanel = document.getElementById("adminPanel");
@@ -123,11 +131,11 @@ function renderReservas(reservas) {
     <article class="rounded-lg border border-green-100 bg-white p-3 shadow-sm">
       <div class="mb-1 flex items-center gap-2">
         ${estadoBadge(r.estado)}
-        <strong>${r.nombre}</strong> — ${r.telefono}
+        <strong>${escapeHtml(r.nombre)}</strong> — ${escapeHtml(r.telefono)}
       </div>
-      <p class="text-sm text-slate-600">${getCanchaEtiqueta(r.cancha)} · ${formatFecha(r.fecha)} · ${r.horario}</p>
+      <p class="text-sm text-slate-600">${escapeHtml(getCanchaEtiqueta(r.cancha))} · ${formatFecha(r.fecha)} · ${escapeHtml(r.horario)}</p>
       <p class="mt-1">
-        <a href="${r.comprobanteUrl}" target="_blank" rel="noopener noreferrer"
+        <a href="${escapeHtml(r.comprobanteUrl)}" target="_blank" rel="noopener noreferrer"
            class="text-sm text-green-700 underline hover:text-green-900">Ver comprobante</a>
       </p>
       <div class="mt-2 flex flex-wrap gap-2">
@@ -136,7 +144,7 @@ function renderReservas(reservas) {
                data-action="confirmar" data-id="${r.id}" type="button">Confirmar</button>`
           : `<button class="rounded-lg bg-green-900 px-3 py-1.5 text-sm font-semibold text-white hover:bg-green-950"
                data-action="revertir" data-id="${r.id}" type="button">Marcar pendiente</button>`}
-        <a href="${whatsappHref(r)}" target="_blank" rel="noopener noreferrer"
+        <a href="${escapeHtml(whatsappHref(r))}" target="_blank" rel="noopener noreferrer"
            class="rounded-lg bg-green-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-green-700">
           WhatsApp
         </a>
@@ -151,9 +159,9 @@ function renderBloqueos(bloqueos) {
   if (!bloqueos.length) { bloqueosList.innerHTML = "<p>No hay bloqueos activos.</p>"; return; }
   bloqueosList.innerHTML = bloqueos.map((b) => `
     <article class="rounded-lg border border-amber-100 bg-amber-50 p-3">
-      <p><strong>${getCanchaEtiqueta(b.cancha)}</strong> - ${formatFecha(b.fecha)}</p>
-      <p class="text-sm text-amber-800">${describeBloqueoHorario(b)}</p>
-      <p class="text-sm text-slate-600">Motivo: ${b.motivo}</p>
+      <p><strong>${escapeHtml(getCanchaEtiqueta(b.cancha))}</strong> - ${formatFecha(b.fecha)}</p>
+      <p class="text-sm text-amber-800">${escapeHtml(describeBloqueoHorario(b))}</p>
+      <p class="text-sm text-slate-600">Motivo: ${escapeHtml(b.motivo)}</p>
       <button class="mt-1 rounded-lg bg-red-700 px-3 py-2 font-semibold text-white hover:bg-red-800"
         data-action="quitar-bloqueo" data-id="${b.id}" type="button">
         Quitar bloqueo
@@ -352,7 +360,7 @@ async function loadCanchas() {
   const planBadge = `
     <div class="flex items-center justify-between mb-2">
       <span class="text-xs font-semibold text-slate-500">
-        Plan <strong class="text-slate-700">${planNombre}</strong> — ${activas}/${maxCanchas} cancha${maxCanchas === 1 ? "" : "s"}
+        Plan <strong class="text-slate-700">${escapeHtml(planNombre)}</strong> — ${activas}/${maxCanchas} cancha${maxCanchas === 1 ? "" : "s"}
       </span>
       ${atLimit ? `<span class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">Límite alcanzado</span>` : ""}
     </div>
@@ -364,8 +372,8 @@ async function loadCanchas() {
   }
   canchasList.innerHTML = planBadge + canchas.map((c) => `
     <div class="flex items-center gap-2 rounded-lg border border-green-100 bg-green-50 px-3 py-2" data-cancha-id="${c.id}">
-      <span class="font-mono text-sm bg-green-200 text-green-900 rounded px-2 py-0.5">${c.nombre}</span>
-      <input type="text" value="${c.etiqueta}" class="flex-1 rounded border border-slate-300 px-2 py-1 text-sm cancha-etiqueta-input focus:outline-none focus:ring-1 focus:ring-green-500" data-id="${c.id}" />
+      <span class="font-mono text-sm bg-green-200 text-green-900 rounded px-2 py-0.5">${escapeHtml(c.nombre)}</span>
+      <input type="text" value="${escapeHtml(c.etiqueta)}" class="flex-1 rounded border border-slate-300 px-2 py-1 text-sm cancha-etiqueta-input focus:outline-none focus:ring-1 focus:ring-green-500" data-id="${c.id}" />
       <button class="rounded bg-green-700 px-2 py-1 text-xs font-semibold text-white hover:bg-green-800"
         data-action="renombrar-cancha" data-id="${c.id}" type="button">Guardar</button>
       <button class="rounded bg-red-600 px-2 py-1 text-xs font-semibold text-white hover:bg-red-700"

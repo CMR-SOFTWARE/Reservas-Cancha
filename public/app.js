@@ -5,6 +5,15 @@ function getClubSlug() {
 }
 const CLUB_SLUG = getClubSlug();
 
+function escapeHtml(str) {
+  return String(str ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 const canchaSelect = document.getElementById("cancha");
 const fechaInput = document.getElementById("fecha");
 const btnBuscar = document.getElementById("btnBuscar");
@@ -62,7 +71,7 @@ async function loadConfig() {
 
   // Poblar dropdown de canchas dinamicamente
   canchaSelect.innerHTML = config.canchas
-    .map((c) => `<option value="${c.nombre}">${c.etiqueta}</option>`)
+    .map((c) => `<option value="${escapeHtml(c.nombre)}">${escapeHtml(c.etiqueta)}</option>`)
     .join("");
 
   aliasTransferencia.textContent = config.transferencia.alias;
@@ -81,7 +90,7 @@ async function loadConfig() {
   const navLogo = document.getElementById("navLogo");
   if (navLogo) {
     if (config.logoUrl) {
-      navLogo.outerHTML = `<img id="navLogo" src="${config.logoUrl}" alt="${config.nombre}" class="h-12 w-12 md:h-14 md:w-14 rounded-full object-cover ring-1 ring-zinc-600" />`;
+      navLogo.outerHTML = `<img id="navLogo" src="${escapeHtml(config.logoUrl)}" alt="${escapeHtml(config.nombre)}" class="h-12 w-12 md:h-14 md:w-14 rounded-full object-cover ring-1 ring-zinc-600" />`;
     } else {
       const initials = config.nombre.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || "").join("");
       navLogo.textContent = initials;

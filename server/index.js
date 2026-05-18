@@ -26,6 +26,9 @@ const DB_FILE = process.env.SQLITE_PATH || path.join(DATA_DIR, "reservas.sqlite"
 const UPLOADS_DIR = path.join(DATA_DIR, "uploads");
 
 const ADMIN_SESSION_SECRET = process.env.ADMIN_SESSION_SECRET || "cambia_esta_clave";
+if (!process.env.ADMIN_SESSION_SECRET) {
+  console.warn("[security] ADVERTENCIA: ADMIN_SESSION_SECRET no configurado — los tokens admin son predecibles. Configuralo en .env");
+}
 const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const ADMIN_SCRYPT_KEYLEN = 64;
 const ADMIN_SCRYPT_OPTS = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
@@ -75,6 +78,59 @@ const PLANES = {
   max:      { nombre: "Max",      maxCanchas: 10, precio: 100000 },
 };
 function getMaxCanchas(plan) { return PLANES[plan]?.maxCanchas ?? 2; }
+
+// ============================================================
+// RATE LIMITING (anti brute-force en endpoints de login)
+// ============================================================
+const loginAttempts = new Map();
+const LOGIN_MAX_ATTEMPTS = 10;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+
+function getClientIp(req) {
+  return (req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "unknown")
+    .split(",")[0].trim();
+}
+
+function checkLoginRateLimit(key) {
+  const now = Date.now();
+  const entry = loginAttempts.get(key);
+  if (!entry || now > entry.resetAt) {
+    loginAttempts.set(key, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
+    return true;
+  }
+  if (entry.count >= LOGIN_MAX_ATTEMPTS) return false;
+  entry.count++;
+  return true;
+}
+
+function resetLoginRateLimit(key) {
+  loginAttempts.delete(key);
+}
+
+function verifySuperAdminPassword(plain) {
+  if (!SUPERADMIN_PASSWORD || !plain) return false;
+  try {
+    const a = Buffer.from(String(plain));
+    const b = Buffer.from(String(SUPERADMIN_PASSWORD));
+    if (a.length !== b.length) {
+      crypto.timingSafeEqual(Buffer.alloc(b.length), b);
+      return false;
+    }
+    return crypto.timingSafeEqual(a, b);
+  } catch (_) { return false; }
+}
+
+async function validateFileMagicBytes(file) {
+  let buf = file.buffer;
+  if (!buf && file.path) buf = await fs.readFile(file.path).catch(() => null);
+  if (!buf || buf.length < 8) return false;
+  const mime = file.mimetype;
+  if (mime === "image/jpeg") return buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF;
+  if (mime === "image/png")  return buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47;
+  if (mime === "image/webp") return buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46;
+  if (mime === "application/pdf") return buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46;
+  return false;
+}
 
 const db = USE_SQLITE ? new sqlite3.Database(DB_FILE) : null;
 
@@ -658,7 +714,9 @@ function validateReservaPayload(body, club) {
   const horariosValidos = generarHorarios(club);
 
   if (!nombre || nombre.length < 3) return "El nombre y apellido es obligatorio.";
+  if (nombre.length > 100) return "El nombre no puede superar 100 caracteres.";
   if (!telefono || telefono.length < 6) return "El telefono es obligatorio.";
+  if (telefono.length > 30) return "El telefono es invalido.";
   if (!canchaValida) return "Cancha invalida.";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return "Fecha invalida.";
   if (!horariosValidos.includes(horario)) return "Horario invalido.";
@@ -696,6 +754,14 @@ const logoUpload = multer({
     if (file.mimetype.startsWith("image/")) return cb(null, true);
     cb(new Error("Solo se permiten imágenes."));
   },
+});
+
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("X-XSS-Protection", "1; mode=block");
+  next();
 });
 
 app.use(express.json());
@@ -747,10 +813,16 @@ app.get("/api/:slug/config", resolveClub, (req, res) => {
 
 app.post("/api/:slug/admin/login", resolveClub, async (req, res, next) => {
   try {
+    const ip = getClientIp(req);
+    const rlKey = `admin:${ip}:${req.club.id}`;
+    if (!checkLoginRateLimit(rlKey)) {
+      return res.status(429).json({ error: "Demasiados intentos. Esperá 15 minutos." });
+    }
     const password = (req.body?.password || "").trim();
     if (!password) return res.status(401).json({ error: "Clave de admin incorrecta." });
     const ok = await verifyAdminPasswordForClub(password, req.club.id);
     if (!ok) return res.status(401).json({ error: "Clave de admin incorrecta." });
+    resetLoginRateLimit(rlKey);
     const token = createAdminSession(req.club.id);
     return res.json({ token, expiresInMs: ADMIN_SESSION_TTL_MS });
   } catch (error) { return next(error); }
@@ -762,7 +834,8 @@ app.get("/api/:slug/reservas", resolveClub, async (req, res, next) => {
     const fecha = (req.query.fecha || "").trim();
     const cancha = req.query.cancha ? String(req.query.cancha) : null;
     const reservas = await readReservas({ clubId: req.club.id, fecha, cancha });
-    res.json(reservas);
+    // Solo devuelve disponibilidad — sin datos personales (nombre, teléfono, comprobante)
+    res.json(reservas.map((r) => ({ cancha: r.cancha, fecha: r.fecha, horario: r.horario })));
   } catch (error) { next(error); }
 });
 
@@ -781,6 +854,12 @@ app.post("/api/:slug/reservas", resolveClub, upload.single("comprobante"), async
     const validationError = validateReservaPayload(req.body, req.club);
     if (validationError) return res.status(400).json({ error: validationError });
     if (!req.file) return res.status(400).json({ error: "Debes subir un comprobante." });
+
+    const validMagic = await validateFileMagicBytes(req.file);
+    if (!validMagic) {
+      if (req.file.path) fs.unlink(req.file.path).catch(() => {});
+      return res.status(400).json({ error: "El archivo no es válido. Solo JPG, PNG, WEBP o PDF." });
+    }
 
     const nombre = req.body.nombre.trim();
     const telefono = req.body.telefono.trim();
@@ -895,7 +974,7 @@ app.post("/api/:slug/admin/bloqueos", resolveClub, requireAdmin, async (req, res
     const horario = (req.body.horario || "").trim();
     const horarioDesde = (req.body.horarioDesde || "").trim();
     const horarioHasta = (req.body.horarioHasta || "").trim();
-    const motivo = (req.body.motivo || "").trim() || "Bloqueado por administracion";
+    const motivo = ((req.body.motivo || "").trim() || "Bloqueado por administracion").slice(0, 300);
     const diaCompleto = Boolean(req.body.diaCompleto);
     const club = req.club;
     const clubId = club.id;
@@ -1192,10 +1271,16 @@ app.post("/api/superadmin/login", async (req, res, next) => {
     if (!SUPERADMIN_PASSWORD) {
       return res.status(503).json({ error: "Super-admin no habilitado en este servidor. Configurá SUPERADMIN_PASSWORD en .env" });
     }
+    const ip = getClientIp(req);
+    const rlKey = `superadmin:${ip}`;
+    if (!checkLoginRateLimit(rlKey)) {
+      return res.status(429).json({ error: "Demasiados intentos. Esperá 15 minutos." });
+    }
     const password = (req.body?.password || "").trim();
-    if (!password || password !== SUPERADMIN_PASSWORD) {
+    if (!verifySuperAdminPassword(password)) {
       return res.status(401).json({ error: "Clave incorrecta." });
     }
+    resetLoginRateLimit(rlKey);
     const token = createAdminSession(0);
     return res.json({ token, expiresInMs: ADMIN_SESSION_TTL_MS });
   } catch (error) { next(error); }
@@ -1225,6 +1310,7 @@ app.post("/api/superadmin/clubs", requireSuperAdmin, async (req, res, next) => {
     if (!nombre || !rawSlug || !password) {
       return res.status(400).json({ error: "nombre, slug y password son requeridos." });
     }
+    if (nombre.length > 100) return res.status(400).json({ error: "El nombre es demasiado largo." });
     if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(rawSlug) || rawSlug.length < 2) {
       return res.status(400).json({ error: "Slug inválido. Usá letras minúsculas, números y guiones." });
     }
@@ -1372,9 +1458,12 @@ app.post("/api/solicitudes", upload.single("comprobante"), async (req, res, next
     const email = (req.body?.email || "").trim().toLowerCase();
     const plan = PLANES[req.body?.plan] ? req.body.plan : "inicial";
 
-    if (!nombre || !whatsapp || !email) {
+    if (!nombre || nombre.length < 3) return res.status(400).json({ error: "Nombre inválido." });
+    if (nombre.length > 100) return res.status(400).json({ error: "El nombre es demasiado largo." });
+    if (!whatsapp || !email) {
       return res.status(400).json({ error: "Nombre, WhatsApp y email son requeridos." });
     }
+    if (email.length > 150) return res.status(400).json({ error: "El email es inválido." });
     if (!req.file) {
       return res.status(400).json({ error: "El comprobante de pago es requerido." });
     }

@@ -24,6 +24,15 @@ const createMsg = document.getElementById("createMsg");
 
 let saToken = sessionStorage.getItem("saToken") || "";
 
+function escapeHtml(str) {
+  return String(str ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function setMsg(el, text, isError = true) {
   el.textContent = text;
   el.className = `text-sm ${isError ? "text-red-600" : "text-emerald-700"}`;
@@ -57,14 +66,14 @@ cfgNombre.addEventListener("input", () => {
 
 function logoPreview(club) {
   if (club.logo_url) {
-    return `<img src="${club.logo_url}" alt="${club.nombre}"
+    return `<img src="${escapeHtml(club.logo_url)}" alt="${escapeHtml(club.nombre)}"
               class="w-12 h-12 rounded-lg object-cover border border-slate-200 flex-shrink-0" />`;
   }
   const colors = ["bg-blue-500","bg-emerald-500","bg-violet-500","bg-orange-500","bg-rose-500","bg-teal-500"];
   let n = 0;
   for (const ch of club.slug) n = (n * 31 + ch.charCodeAt(0)) >>> 0;
   const color = colors[n % colors.length];
-  const initials = club.nombre.split(/\s+/).slice(0,2).map((w) => w[0]?.toUpperCase() || "").join("");
+  const initials = escapeHtml(club.nombre.split(/\s+/).slice(0,2).map((w) => w[0]?.toUpperCase() || "").join(""));
   return `<div class="w-12 h-12 rounded-lg ${color} flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
             ${initials}
           </div>`;
@@ -92,8 +101,8 @@ async function loadClubs() {
         <div class="flex items-center gap-3">
           ${logoPreview(c)}
           <div class="flex-1 min-w-0">
-            <div class="font-semibold text-slate-800 truncate">${c.nombre}</div>
-            <div class="text-xs text-slate-400 font-mono">/${c.slug}</div>
+            <div class="font-semibold text-slate-800 truncate">${escapeHtml(c.nombre)}</div>
+            <div class="text-xs text-slate-400 font-mono">/${escapeHtml(c.slug)}</div>
           </div>
           <div class="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
             <span class="text-xs font-semibold px-2 py-0.5 rounded-full ${PLAN_BADGE[plan] || PLAN_BADGE.inicial}">
@@ -118,9 +127,9 @@ async function loadClubs() {
                   data-action="toggle-activo" data-club-id="${c.id}" data-activo="${c.activo ? '1' : '0'}">
             ${c.activo ? 'Desactivar' : 'Activar'}
           </button>
-          <a href="/${c.slug}" target="_blank"
+          <a href="/${escapeHtml(c.slug)}" target="_blank"
              class="text-xs text-blue-600 hover:underline flex-shrink-0">Ver</a>
-          <a href="/${c.slug}/admin" target="_blank"
+          <a href="/${escapeHtml(c.slug)}/admin" target="_blank"
              class="text-xs text-blue-600 hover:underline flex-shrink-0">Admin</a>
         </div>
         <div class="flex items-center gap-2 pt-1 border-t border-slate-200">
@@ -254,15 +263,15 @@ async function loadSolicitudes() {
       <div class="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2">
         <div class="flex items-start justify-between gap-2">
           <div>
-            <div class="font-semibold text-slate-800">${s.nombre}</div>
-            <div class="text-xs text-slate-400">${s.email} · WA: ${s.whatsapp} · <span class="capitalize">${s.deporte}</span></div>
-            <div class="text-xs text-slate-400 font-mono">slug sugerido: /${s.slug} · Plan: <strong>${PLAN_LABELS[s.plan] || s.plan || "Inicial"}</strong></div>
+            <div class="font-semibold text-slate-800">${escapeHtml(s.nombre)}</div>
+            <div class="text-xs text-slate-400">${escapeHtml(s.email)} · WA: ${escapeHtml(s.whatsapp)} · <span class="capitalize">${escapeHtml(s.deporte)}</span></div>
+            <div class="text-xs text-slate-400 font-mono">slug sugerido: /${escapeHtml(s.slug)} · Plan: <strong>${escapeHtml(PLAN_LABELS[s.plan] || s.plan || "Inicial")}</strong></div>
           </div>
           <span class="text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${ESTADO_BADGE[s.estado] || ''}">
-            ${s.estado.charAt(0).toUpperCase() + s.estado.slice(1)}
+            ${escapeHtml(s.estado.charAt(0).toUpperCase() + s.estado.slice(1))}
           </span>
         </div>
-        ${s.comprobante_url ? `<a href="${s.comprobante_url}" target="_blank" class="text-xs text-blue-600 hover:underline">Ver comprobante</a>` : ""}
+        ${s.comprobante_url ? `<a href="${escapeHtml(s.comprobante_url)}" target="_blank" class="text-xs text-blue-600 hover:underline">Ver comprobante</a>` : ""}
         ${s.estado === "pendiente" ? `
         <div class="flex gap-2 pt-1">
           <button class="rounded-lg bg-green-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-800"
