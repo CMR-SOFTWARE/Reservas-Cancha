@@ -92,16 +92,50 @@
         </section>
 
         <section class="mb-4 rounded-xl bg-white p-4 shadow-sm">
+          <!-- Encabezado: título + tabs + exportar -->
           <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
             <h2 class="text-xl font-semibold text-green-900">Turnos reservados</h2>
-            <div class="flex items-center gap-2">
-              <label class="text-sm font-medium text-slate-600" for="filtroFecha">Fecha</label>
-              <input id="filtroFecha" type="date" class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
-              <button id="btnFiltrarReservas" class="rounded-lg bg-green-800 px-3 py-1.5 text-sm font-semibold text-white hover:bg-green-900" type="button">Filtrar</button>
-              <button id="btnLimpiarFiltro" class="rounded-lg border border-green-700 px-3 py-1.5 text-sm font-semibold text-green-800 hover:bg-green-50" type="button">Todas</button>
+            <div class="flex flex-wrap items-center gap-2">
+              <div class="flex overflow-hidden rounded-lg border border-slate-200 text-sm font-semibold">
+                <button id="btnVistaLista" type="button"
+                  class="px-3 py-1.5 bg-green-800 text-white">Lista</button>
+                <button id="btnVistaCalendario" type="button"
+                  class="px-3 py-1.5 text-green-800 hover:bg-green-50">Calendario</button>
+              </div>
+              <button id="btnExportarCSV" type="button"
+                class="rounded-lg border border-green-700 px-3 py-1.5 text-sm font-semibold text-green-800 hover:bg-green-50">
+                Exportar CSV
+              </button>
             </div>
           </div>
-          <div id="reservasList" class="grid gap-3"></div>
+          <!-- Filtros (solo vista lista) -->
+          <div id="filtrosLista" class="mb-3 flex flex-wrap items-center gap-2">
+            <label class="text-sm font-medium text-slate-600" for="filtroFecha">Fecha</label>
+            <input id="filtroFecha" type="date" class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+            <button id="btnFiltrarReservas" class="rounded-lg bg-green-800 px-3 py-1.5 text-sm font-semibold text-white hover:bg-green-900" type="button">Filtrar</button>
+            <button id="btnLimpiarFiltro" class="rounded-lg border border-green-700 px-3 py-1.5 text-sm font-semibold text-green-800 hover:bg-green-50" type="button">Todas</button>
+          </div>
+          <!-- Vista lista -->
+          <div id="vistaLista">
+            <div id="reservasList" class="grid gap-3"></div>
+          </div>
+          <!-- Vista calendario -->
+          <div id="vistaCalendario" class="hidden">
+            <div class="mb-3 flex flex-wrap items-center gap-3">
+              <label class="text-sm font-medium text-slate-600">Cancha:</label>
+              <select id="calCancha"
+                class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"></select>
+              <div class="flex items-center gap-2">
+                <button id="btnCalPrev" type="button"
+                  class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">&#8592; Anterior</button>
+                <span id="calSemanaLabel"
+                  class="min-w-[150px] text-center text-sm font-semibold text-slate-700"></span>
+                <button id="btnCalNext" type="button"
+                  class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">Siguiente &#8594;</button>
+              </div>
+            </div>
+            <div id="calGrid" class="overflow-x-auto rounded-lg border border-slate-200"></div>
+          </div>
         </section>
 
         <section class="mb-4 rounded-xl bg-white shadow-sm overflow-hidden">

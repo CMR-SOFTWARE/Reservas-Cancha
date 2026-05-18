@@ -32,6 +32,7 @@ const reservasList = document.getElementById("reservasList");
 
 let config = null;
 let adminToken = localStorage.getItem("adminToken") || "";
+let reservasActuales = [];
 
 function todayISO() {
   const date = new Date();
@@ -91,6 +92,14 @@ async function loadConfig() {
   // Actualizar titulo con nombre del club
   const h1 = document.querySelector("h1");
   if (h1 && config.nombre) h1.textContent = `Panel Admin - ${config.nombre}`;
+
+  // Poblar selector de cancha del calendario
+  const calCanchaEl = document.getElementById("calCancha");
+  if (calCanchaEl) {
+    calCanchaEl.innerHTML = config.canchas
+      .map((c) => `<option value="${escapeHtml(c.nombre)}">${escapeHtml(c.etiqueta)}</option>`)
+      .join("");
+  }
 }
 
 function getCanchaEtiqueta(nombreCancha) {
@@ -114,9 +123,9 @@ function estadoBadge(estado) {
     pendiente: "bg-amber-100 text-amber-800 border border-amber-200",
     confirmada: "bg-green-100 text-green-800 border border-green-200",
   };
-  const labels = { pendiente: "Pendiente", confirmada: "Confirmada" };
+  const labels = { pendiente: "Sin pagar", confirmada: "Pagado" };
   const cls = estilos[estado] || estilos.pendiente;
-  const label = labels[estado] || "Pendiente";
+  const label = labels[estado] || "Sin pagar";
   return `<span class="rounded-full px-2 py-0.5 text-xs font-semibold ${cls}">${label}</span>`;
 }
 
@@ -141,9 +150,9 @@ function renderReservas(reservas) {
       <div class="mt-2 flex flex-wrap gap-2">
         ${r.estado === "pendiente"
           ? `<button class="rounded-lg bg-green-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-green-800"
-               data-action="confirmar" data-id="${r.id}" type="button">Confirmar</button>`
+               data-action="confirmar" data-id="${r.id}" type="button">Marcar pagado</button>`
           : `<button class="rounded-lg bg-green-900 px-3 py-1.5 text-sm font-semibold text-white hover:bg-green-950"
-               data-action="revertir" data-id="${r.id}" type="button">Marcar pendiente</button>`}
+               data-action="revertir" data-id="${r.id}" type="button">Marcar sin pagar</button>`}
         <a href="${escapeHtml(whatsappHref(r))}" target="_blank" rel="noopener noreferrer"
            class="rounded-lg bg-green-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-green-700">
           WhatsApp
@@ -185,6 +194,7 @@ const btnLimpiarFiltro = document.getElementById("btnLimpiarFiltro");
 async function loadReservasAdmin(fecha = "") {
   const qs = fecha ? `?fecha=${encodeURIComponent(fecha)}` : "";
   const reservas = await api(`/api/${CLUB_SLUG}/admin/reservas${qs}`);
+  reservasActuales = reservas;
   renderReservas(reservas);
 }
 
@@ -278,7 +288,7 @@ reservasList.addEventListener("click", async (event) => {
         method: "PATCH",
         body: JSON.stringify({ estado: nuevoEstado }),
       });
-      setMessage(adminMessage, nuevoEstado === "confirmada" ? "Turno confirmado." : "Turno marcado como pendiente.", false);
+      setMessage(adminMessage, nuevoEstado === "confirmada" ? "Turno marcado como pagado." : "Turno marcado sin pagar.", false);
       await loadReservasAdmin(filtroFecha.value);
     } catch (error) { setMessage(adminMessage, error.message || "No se pudo actualizar el estado."); }
     return;
@@ -472,6 +482,186 @@ btnCambiarPass.addEventListener("click", async () => {
     setMessage(cfgPassMsg, "Contrasena cambiada correctamente.", false);
   } catch (error) { setMessage(cfgPassMsg, error.message || "No se pudo cambiar la contrasena."); }
 });
+
+// ── Vista calendario ──────────────────────────────────────────
+
+const btnVistaLista = document.getElementById("btnVistaLista");
+const btnVistaCalendario = document.getElementById("btnVistaCalendario");
+const vistaLista = document.getElementById("vistaLista");
+const vistaCalendario = document.getElementById("vistaCalendario");
+const filtrosLista = document.getElementById("filtrosLista");
+
+let calSemanaOffset = 0;
+
+const DAY_NAMES = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+
+function getWeekDates(offset = 0) {
+  const today = new Date();
+  const dow = today.getDay();
+  const diffToMonday = dow === 0 ? -6 : 1 - dow;
+  const monday = new Date(today);
+  monday.setDate(today.getDate() + diffToMonday + offset * 7);
+  monday.setHours(0, 0, 0, 0);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const tz = d.getTimezoneOffset() * 60000;
+    return new Date(d - tz).toISOString().split("T")[0];
+  });
+}
+
+function updateCalLabel(dates) {
+  const label = document.getElementById("calSemanaLabel");
+  if (!label) return;
+  const [, m0, d0] = dates[0].split("-");
+  const [y1, m1, d1] = dates[6].split("-");
+  label.textContent = `${d0}/${m0} — ${d1}/${m1}/${y1}`;
+}
+
+function findBloqueoCalendario(bloqueos, cancha, fecha, horario) {
+  const horaNum = Number(horario.split(":")[0]);
+  return bloqueos.find((b) => {
+    if (b.cancha !== cancha || b.fecha !== fecha) return false;
+    if (b.diaCompleto) return true;
+    if (b.horarioDesde && b.horarioHasta) {
+      return horaNum >= Number(b.horarioDesde.split(":")[0]) && horaNum <= Number(b.horarioHasta.split(":")[0]);
+    }
+    return b.horario === horario;
+  });
+}
+
+function renderCalGrid(dates, reservasPorDia, bloqueos, cancha) {
+  const calGrid = document.getElementById("calGrid");
+  if (!calGrid || !config) return;
+  const horarios = config.horarios;
+  const now = new Date();
+  const tz = now.getTimezoneOffset() * 60000;
+  const todayStr = new Date(now - tz).toISOString().split("T")[0];
+
+  const reservaMap = {};
+  dates.forEach((fecha, i) => { reservaMap[fecha] = reservasPorDia[i] || []; });
+
+  const thead = `<thead><tr>
+    <th class="sticky left-0 z-10 min-w-[52px] border-b border-r border-slate-200 bg-slate-50 px-2 py-2 text-xs font-semibold text-slate-500">Hora</th>
+    ${dates.map((fecha, i) => {
+      const [, mm, dd] = fecha.split("-");
+      const isToday = fecha === todayStr;
+      return `<th class="min-w-[90px] border-b border-r border-slate-200 px-2 py-2 text-xs font-semibold ${isToday ? "bg-green-50 text-green-800" : "bg-slate-50 text-slate-500"}">
+        ${escapeHtml(DAY_NAMES[i])}<br/><span class="font-normal">${dd}/${mm}</span>
+      </th>`;
+    }).join("")}
+  </tr></thead>`;
+
+  const tbody = horarios.map((horario) => {
+    const cells = dates.map((fecha) => {
+      const reserva = (reservaMap[fecha] || []).find((r) => r.horario === horario);
+      const bloqueo = findBloqueoCalendario(bloqueos, cancha, fecha, horario);
+      const [y, mo, d] = fecha.split("-").map(Number);
+      const [h, m] = horario.split(":").map(Number);
+      const pasado = new Date(y, mo - 1, d, h, m).getTime() < Date.now();
+
+      if (bloqueo) {
+        return `<td class="border-r border-b border-slate-200 bg-amber-50 px-1.5 py-1.5 align-top text-xs">
+          <span class="block font-semibold leading-tight text-amber-700">Bloqueado</span>
+          ${bloqueo.motivo ? `<span class="block max-w-[80px] truncate leading-tight text-amber-600">${escapeHtml(bloqueo.motivo)}</span>` : ""}
+        </td>`;
+      }
+      if (reserva) {
+        const color = reserva.estado === "confirmada" ? "text-green-700" : "text-amber-700";
+        const label = reserva.estado === "confirmada" ? "Pagado" : "Sin pagar";
+        return `<td class="border-r border-b border-slate-200 bg-blue-50 px-1.5 py-1.5 align-top text-xs">
+          <span class="block max-w-[80px] truncate font-semibold leading-tight text-slate-700">${escapeHtml(reserva.nombre)}</span>
+          <span class="block leading-tight ${color}">${escapeHtml(label)}</span>
+        </td>`;
+      }
+      if (pasado) {
+        return `<td class="border-r border-b border-slate-200 bg-slate-50 px-1.5 py-1.5 text-xs text-slate-300">—</td>`;
+      }
+      return `<td class="border-r border-b border-slate-200 bg-emerald-50 px-1.5 py-1.5 text-xs text-emerald-400">libre</td>`;
+    }).join("");
+    return `<tr>
+      <td class="sticky left-0 z-10 border-r border-b border-slate-200 bg-slate-50 px-2 py-2 text-xs font-mono font-semibold text-slate-600">${escapeHtml(horario)}</td>
+      ${cells}
+    </tr>`;
+  }).join("");
+
+  calGrid.innerHTML = `<table class="w-full border-collapse text-left">${thead}<tbody>${tbody}</tbody></table>`;
+}
+
+async function loadCalendario() {
+  const calGrid = document.getElementById("calGrid");
+  const calCanchaEl = document.getElementById("calCancha");
+  if (!calGrid || !calCanchaEl || !config) return;
+  const cancha = calCanchaEl.value;
+  const dates = getWeekDates(calSemanaOffset);
+  updateCalLabel(dates);
+  calGrid.innerHTML = `<div class="p-4 text-sm text-slate-400">Cargando...</div>`;
+  try {
+    const [reservasPorDia, todosBloqueos] = await Promise.all([
+      Promise.all(
+        dates.map((fecha) =>
+          api(`/api/${CLUB_SLUG}/admin/reservas?fecha=${encodeURIComponent(fecha)}`)
+            .then((rs) => rs.filter((r) => r.cancha === cancha))
+            .catch(() => [])
+        )
+      ),
+      api(`/api/${CLUB_SLUG}/admin/bloqueos`).catch(() => []),
+    ]);
+    renderCalGrid(dates, reservasPorDia, todosBloqueos, cancha);
+  } catch (e) {
+    calGrid.innerHTML = `<div class="p-4 text-sm text-red-600">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function setVista(vista) {
+  const isLista = vista === "lista";
+  vistaLista?.classList.toggle("hidden", !isLista);
+  vistaCalendario?.classList.toggle("hidden", isLista);
+  filtrosLista?.classList.toggle("hidden", !isLista);
+  btnVistaLista?.classList.toggle("bg-green-800", isLista);
+  btnVistaLista?.classList.toggle("text-white", isLista);
+  btnVistaLista?.classList.toggle("text-green-800", !isLista);
+  btnVistaCalendario?.classList.toggle("bg-green-800", !isLista);
+  btnVistaCalendario?.classList.toggle("text-white", !isLista);
+  btnVistaCalendario?.classList.toggle("text-green-800", isLista);
+  if (!isLista) loadCalendario();
+}
+
+btnVistaLista?.addEventListener("click", () => setVista("lista"));
+btnVistaCalendario?.addEventListener("click", () => setVista("calendario"));
+document.getElementById("btnCalPrev")?.addEventListener("click", () => { calSemanaOffset--; loadCalendario(); });
+document.getElementById("btnCalNext")?.addEventListener("click", () => { calSemanaOffset++; loadCalendario(); });
+document.getElementById("calCancha")?.addEventListener("change", () => loadCalendario());
+
+// ── Exportar CSV ──────────────────────────────────────────────
+
+function exportarCSV() {
+  if (!reservasActuales.length) {
+    alert("No hay reservas cargadas. Filtrá primero las reservas que querés exportar.");
+    return;
+  }
+  const headers = ["Fecha", "Cancha", "Horario", "Nombre", "Telefono", "Estado"];
+  const filas = [headers, ...reservasActuales.map((r) => [
+    r.fecha,
+    getCanchaEtiqueta(r.cancha),
+    r.horario,
+    r.nombre,
+    r.telefono,
+    r.estado === "confirmada" ? "Pagado" : "Sin pagar",
+  ])];
+  const csv = filas.map((f) => f.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `reservas-${todayISO()}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+document.getElementById("btnExportarCSV")?.addEventListener("click", exportarCSV);
 
 // ─────────────────────────────────────────────────────────────
 
