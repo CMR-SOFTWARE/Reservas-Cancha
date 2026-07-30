@@ -569,17 +569,53 @@ function generarHorarios(club) {
   return horarios;
 }
 
+// Horarios de reserva se interpretan en zona del club (no en UTC del servidor).
+const CLUB_TIMEZONE = process.env.CLUB_TIMEZONE || "America/Argentina/Buenos_Aires";
+
+function getTimeZoneOffsetMs(date, timeZone) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    timeZoneName: "shortOffset",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const tzName = parts.find((p) => p.type === "timeZoneName")?.value || "GMT";
+  const match = tzName.match(/GMT([+-])(\d{1,2})(?::?(\d{2}))?/i);
+  if (!match) return 0;
+  const sign = match[1] === "-" ? -1 : 1;
+  const hours = Number(match[2]) || 0;
+  const minutes = Number(match[3]) || 0;
+  return sign * (hours * 60 + minutes) * 60 * 1000;
+}
+
 function toReservaTimestamp(fecha, horario) {
   if (!fecha || !horario) return NaN;
   const [year, month, day] = String(fecha).split("-").map(Number);
   const [hour = 0, minute = 0] = String(horario).split(":").map(Number);
   if ([year, month, day, hour, minute].some((v) => !Number.isFinite(v))) return NaN;
-  return new Date(year, month - 1, day, hour, minute, 0, 0).getTime();
+  // Interpretar fecha+horario como hora local del club → UTC ms
+  const utcGuess = Date.UTC(year, month - 1, day, hour, minute, 0, 0);
+  const offsetMs = getTimeZoneOffsetMs(new Date(utcGuess), CLUB_TIMEZONE);
+  return utcGuess - offsetMs;
 }
 
 function isReservaExpirada(reserva, nowMs = Date.now()) {
   const ms = toReservaTimestamp(reserva.fecha, reserva.horario);
   return !Number.isNaN(ms) && ms < nowMs;
+}
+
+function todayInClubTz(now = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: CLUB_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
 }
 
 function getBloqueoRango(bloqueo, club) {
@@ -688,25 +724,8 @@ async function readReservas({ clubId, fecha = "", cancha = null } = {}) {
   return rows.map(mapReservaRow);
 }
 
-async function purgeExpiredReservas(clubId) {
-  const nowMs = Date.now();
-  const reservas = await readReservas({ clubId });
-  const expiradas = reservas.filter((r) => isReservaExpirada(r, nowMs));
-  if (!expiradas.length) return 0;
-  const ids = expiradas.map((r) => Number(r.id)).filter((id) => Number.isFinite(id));
-  if (!ids.length) return 0;
-
-  if (USE_SUPABASE) {
-    const archivos = expiradas.map((r) => r.comprobante?.archivo).filter(Boolean);
-    if (archivos.length) await supabase.storage.from(SUPABASE_BUCKET).remove(archivos);
-    const { error } = await supabase.from("reservas").delete().in("id", ids);
-    if (error) throw new Error(error.message);
-    return ids.length;
-  }
-  const placeholders = ids.map(() => "?").join(", ");
-  await dbRun(`DELETE FROM reservas WHERE id IN (${placeholders})`, ids);
-  return ids.length;
-}
+// Ya no se borran reservas vencidas: el historial debe quedar visible en admin.
+// Solo se filtran para disponibilidad / conflictos (ver isReservaExpirada).
 
 async function readBloqueosRecurrentes({ clubId, cancha = null } = {}) {
   if (USE_SUPABASE) {
@@ -911,12 +930,13 @@ app.post("/api/:slug/admin/login", resolveClub, async (req, res, next) => {
 
 app.get("/api/:slug/reservas", resolveClub, async (req, res, next) => {
   try {
-    await purgeExpiredReservas(req.club.id);
     const fecha = (req.query.fecha || "").trim();
     const cancha = req.query.cancha ? String(req.query.cancha) : null;
     const reservas = await readReservas({ clubId: req.club.id, fecha, cancha });
+    // Disponibilidad: solo turnos vigentes (los vencidos no bloquean la grilla)
+    const vigentes = reservas.filter((r) => !isReservaExpirada(r));
     // Solo devuelve disponibilidad — sin datos personales (nombre, teléfono, comprobante)
-    res.json(reservas.map((r) => ({ cancha: r.cancha, fecha: r.fecha, horario: r.horario })));
+    res.json(vigentes.map((r) => ({ cancha: r.cancha, fecha: r.fecha, horario: r.horario })));
   } catch (error) { next(error); }
 });
 
@@ -935,9 +955,7 @@ app.get("/api/:slug/mis-reservas", resolveClub, async (req, res, next) => {
     if (!telefono || telefono.length < 6 || telefono.length > 15) {
       return res.status(400).json({ error: "Teléfono inválido." });
     }
-    const now = new Date();
-    const tz = now.getTimezoneOffset() * 60000;
-    const todayStr = new Date(now - tz).toISOString().split("T")[0];
+    const todayStr = todayInClubTz();
     let reservas;
     if (USE_SUPABASE) {
       const { data, error } = await supabase
@@ -968,7 +986,6 @@ app.get("/api/:slug/mis-reservas", resolveClub, async (req, res, next) => {
 
 app.post("/api/:slug/reservas", resolveClub, upload.single("comprobante"), async (req, res, next) => {
   try {
-    await purgeExpiredReservas(req.club.id);
     const validationError = validateReservaPayload(req.body, req.club);
     if (validationError) return res.status(400).json({ error: validationError });
     if (!req.file) return res.status(400).json({ error: "Debes subir un comprobante." });
@@ -990,7 +1007,8 @@ app.post("/api/:slug/reservas", resolveClub, upload.single("comprobante"), async
       readReservas({ clubId }),
       readBloqueos({ clubId }),
     ]);
-    if (reservas.some((r) => r.cancha === cancha && r.fecha === fecha && r.horario === horario)) {
+    // Solo turnos vigentes bloquean el horario (el historial vencido se conserva)
+    if (reservas.some((r) => !isReservaExpirada(r) && r.cancha === cancha && r.fecha === fecha && r.horario === horario)) {
       return res.status(409).json({ error: "Ese horario ya fue reservado. Elegi otro." });
     }
     if (isReservaBloqueada(bloqueos, cancha, fecha, horario)) {
@@ -1044,11 +1062,11 @@ app.post("/api/:slug/reservas", resolveClub, upload.single("comprobante"), async
 
 app.get("/api/:slug/admin/reservas", resolveClub, requireAdmin, async (req, res, next) => {
   try {
-    await purgeExpiredReservas(req.club.id);
     const fecha = (req.query.fecha || "").trim();
     const reservas = await readReservas({ clubId: req.club.id, fecha: fecha || undefined });
     const reservasConLink = reservas.map((r) => ({
       ...r,
+      pasada: isReservaExpirada(r),
       comprobanteUrl: USE_SUPABASE
         ? supabase.storage.from(SUPABASE_BUCKET).getPublicUrl(r.comprobante.archivo).data.publicUrl
         : `/uploads/${r.comprobante.archivo}`,

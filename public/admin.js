@@ -133,7 +133,10 @@ function whatsappHref(r) {
   return `https://wa.me/${telefono}?text=${texto}`;
 }
 
-function estadoBadge(estado) {
+function estadoBadge(estado, pasada = false) {
+  if (pasada) {
+    return `<span class="rounded-full px-2 py-0.5 text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">Pasado</span>`;
+  }
   const estilos = {
     pendiente: "bg-amber-100 text-amber-800 border border-amber-200",
     confirmada: "bg-green-100 text-green-800 border border-green-200",
@@ -147,14 +150,15 @@ function estadoBadge(estado) {
 function renderReservas(reservas) {
   if (!reservas.length) { reservasList.innerHTML = "<p>No hay reservas.</p>"; return; }
   const sorted = [...reservas].sort((a, b) => {
+    if (Boolean(a.pasada) !== Boolean(b.pasada)) return a.pasada ? 1 : -1;
     if (a.estado === "pendiente" && b.estado !== "pendiente") return -1;
     if (a.estado !== "pendiente" && b.estado === "pendiente") return 1;
     return 0;
   });
   reservasList.innerHTML = sorted.map((r) => `
-    <article class="rounded-lg border border-green-100 bg-white p-3 shadow-sm">
+    <article class="rounded-lg border border-green-100 bg-white p-3 shadow-sm ${r.pasada ? "opacity-70" : ""}">
       <div class="mb-1 flex items-center gap-2">
-        ${estadoBadge(r.estado)}
+        ${estadoBadge(r.estado, r.pasada)}
         <strong>${escapeHtml(r.nombre)}</strong> — ${escapeHtml(r.telefono)}
       </div>
       <p class="text-sm text-slate-600">${escapeHtml(getCanchaEtiqueta(r.cancha))} · ${formatFecha(r.fecha)} · ${escapeHtml(r.horario)}</p>
@@ -163,17 +167,17 @@ function renderReservas(reservas) {
            class="text-sm text-green-700 underline hover:text-green-900">Ver comprobante</a>
       </p>
       <div class="mt-2 flex flex-wrap gap-2">
-        ${r.estado === "pendiente"
+        ${r.pasada ? "" : (r.estado === "pendiente"
           ? `<button class="rounded-lg bg-green-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-green-800"
                data-action="confirmar" data-id="${r.id}" type="button">Marcar pagado</button>`
           : `<button class="rounded-lg bg-green-900 px-3 py-1.5 text-sm font-semibold text-white hover:bg-green-950"
-               data-action="revertir" data-id="${r.id}" type="button">Marcar sin pagar</button>`}
+               data-action="revertir" data-id="${r.id}" type="button">Marcar sin pagar</button>`)}
         <a href="${escapeHtml(whatsappHref(r))}" target="_blank" rel="noopener noreferrer"
            class="rounded-lg bg-green-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-green-700">
           WhatsApp
         </a>
-        <button class="rounded-lg bg-red-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-800"
-          data-action="cancelar" data-id="${r.id}" type="button">Cancelar turno</button>
+        ${r.pasada ? "" : `<button class="rounded-lg bg-red-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-800"
+          data-action="cancelar" data-id="${r.id}" type="button">Cancelar turno</button>`}
       </div>
     </article>
   `).join("");
