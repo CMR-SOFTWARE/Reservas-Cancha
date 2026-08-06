@@ -271,7 +271,7 @@ async function loadSolicitudes() {
             ${escapeHtml(s.estado.charAt(0).toUpperCase() + s.estado.slice(1))}
           </span>
         </div>
-        ${s.comprobante_url ? `<a href="${escapeHtml(s.comprobante_url)}" target="_blank" class="text-xs text-blue-600 hover:underline">Ver comprobante</a>` : ""}
+        ${s.comprobanteUrl ? `<a href="${escapeHtml(s.comprobanteUrl)}" target="_blank" rel="noopener noreferrer" class="text-xs text-blue-600 hover:underline">Ver comprobante</a>` : ""}
         ${s.estado === "pendiente" ? `
         <div class="flex gap-2 pt-1">
           <button class="rounded-lg bg-green-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-800"

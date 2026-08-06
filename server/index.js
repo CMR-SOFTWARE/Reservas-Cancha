@@ -34,7 +34,10 @@ const ADMIN_SCRYPT_KEYLEN = 64;
 const ADMIN_SCRYPT_OPTS = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 
 const USE_SUPABASE = Boolean(supabase);
+// Bucket privado: los comprobantes llevan datos bancarios del cliente y solo se
+// sirven por /api/:slug/comprobantes/:id. Los logos van aparte porque son publicos.
 const SUPABASE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET || "comprobantes";
+const SUPABASE_LOGOS_BUCKET = process.env.SUPABASE_LOGOS_BUCKET || "logos";
 const USE_SQLITE = !USE_SUPABASE && Boolean(sqlite3);
 
 const DEFAULT_CLUB_SLUG = (process.env.CLUB_SLUG || "mi-club").toLowerCase().replace(/[^a-z0-9-]/g, "-");
@@ -62,10 +65,14 @@ function parseDefaultCanchas() {
 
 const LOGOS_DIR = path.join(UPLOADS_DIR, "logos");
 const SOLICITUDES_DIR = path.join(UPLOADS_DIR, "solicitudes");
+// Solo uploads/logos se sirve estatico. Comprobantes y solicitudes quedan fuera
+// del alcance de express.static y se sirven por endpoints que validan la firma.
+const COMPROBANTES_DIR = path.join(UPLOADS_DIR, "comprobantes");
 if (!fsSync.existsSync(DATA_DIR)) fsSync.mkdirSync(DATA_DIR, { recursive: true });
 if (!fsSync.existsSync(UPLOADS_DIR)) fsSync.mkdirSync(UPLOADS_DIR, { recursive: true });
 if (!fsSync.existsSync(LOGOS_DIR)) fsSync.mkdirSync(LOGOS_DIR, { recursive: true });
 if (!fsSync.existsSync(SOLICITUDES_DIR)) fsSync.mkdirSync(SOLICITUDES_DIR, { recursive: true });
+if (!fsSync.existsSync(COMPROBANTES_DIR)) fsSync.mkdirSync(COMPROBANTES_DIR, { recursive: true });
 
 const SUBSCRIPTION_PRECIO = process.env.SUBSCRIPTION_PRECIO || "0";
 const SUBSCRIPTION_ALIAS = process.env.SUBSCRIPTION_TRANSFER_ALIAS || "";
@@ -357,6 +364,30 @@ function parseAdminToken(token) {
   const expiresAt = Number(payload.substring(colonIdx + 1));
   if (!Number.isFinite(expiresAt) || Date.now() > expiresAt) return null;
   return { clubId };
+}
+
+// Los comprobantes no son publicos, pero el link viaja en el mensaje de WhatsApp
+// que el cliente le manda al club: por eso se firma en vez de pedir sesion.
+// Cambiar ADMIN_SESSION_SECRET invalida todos los links emitidos.
+function firmarRecurso(recurso) {
+  return crypto.createHmac("sha256", ADMIN_SESSION_SECRET).update(recurso).digest("hex");
+}
+
+function firmaValida(recurso, firma) {
+  const esperada = Buffer.from(firmarRecurso(recurso));
+  const recibida = Buffer.from(String(firma || ""));
+  if (esperada.length !== recibida.length) return false;
+  return crypto.timingSafeEqual(esperada, recibida);
+}
+
+function urlComprobante(slug, clubId, reservaId) {
+  const firma = firmarRecurso(`comprobante:${clubId}:${reservaId}`);
+  return `/api/${slug}/comprobantes/${reservaId}?sig=${firma}`;
+}
+
+function urlComprobanteSolicitud(solicitudId) {
+  const firma = firmarRecurso(`solicitud:${solicitudId}`);
+  return `/api/superadmin/solicitudes/${solicitudId}/comprobante?sig=${firma}`;
 }
 
 async function verifyAdminPasswordForClub(plain, clubId) {
@@ -840,7 +871,7 @@ function validateReservaPayload(body, club) {
 const storage = USE_SUPABASE
   ? multer.memoryStorage()
   : multer.diskStorage({
-      destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
+      destination: (_req, _file, cb) => cb(null, COMPROBANTES_DIR),
       filename: (_req, file, cb) => {
         const safe = file.originalname.replace(/[^\w.\-]/g, "_").toLowerCase();
         cb(null, `${Date.now()}-${Math.round(Math.random() * 1e6)}-${safe}`);
@@ -883,7 +914,8 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json());
-app.use("/uploads", express.static(UPLOADS_DIR));
+// Solo los logos son publicos. Comprobantes y solicitudes se sirven firmados.
+app.use("/uploads/logos", express.static(LOGOS_DIR));
 app.use(express.static(path.join(ROOT_DIR, "public"), { index: false }));
 
 const dbReady = initDb()
@@ -1044,7 +1076,7 @@ app.post("/api/:slug/reservas", resolveClub, upload.single("comprobante"), async
     }
 
     const creadoEn = new Date().toISOString();
-    let comprobanteUrl, comprobanteArchivo, reservaId;
+    let comprobanteArchivo, reservaId;
 
     if (USE_SUPABASE) {
       const ext = path.extname(req.file.originalname).toLowerCase() || ".jpg";
@@ -1053,7 +1085,6 @@ app.post("/api/:slug/reservas", resolveClub, upload.single("comprobante"), async
         .from(SUPABASE_BUCKET).upload(storagePath, req.file.buffer, { contentType: req.file.mimetype, upsert: false });
       if (uploadError) throw new Error(uploadError.message);
       comprobanteArchivo = storagePath;
-      comprobanteUrl = supabase.storage.from(SUPABASE_BUCKET).getPublicUrl(storagePath).data.publicUrl;
       const { data: insertData, error: insertError } = await supabase.from("reservas").insert({
         club_id: clubId, nombre, telefono, cancha, fecha, horario,
         comprobante_nombre_original: req.file.originalname,
@@ -1070,7 +1101,6 @@ app.post("/api/:slug/reservas", resolveClub, upload.single("comprobante"), async
       reservaId = insertData.id;
     } else {
       comprobanteArchivo = req.file.filename;
-      comprobanteUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
       let insertResult;
       try {
         insertResult = await dbRun(
@@ -1090,6 +1120,10 @@ app.post("/api/:slug/reservas", resolveClub, upload.single("comprobante"), async
       reservaId = insertResult.lastID;
     }
 
+    // Absoluta porque este link se copia al mensaje de WhatsApp del cliente.
+    const comprobanteUrl =
+      `${req.protocol}://${req.get("host")}${urlComprobante(req.club.slug, clubId, reservaId)}`;
+
     return res.status(201).json({
       id: reservaId, nombre, telefono, cancha, fecha, horario,
       comprobante: { nombreOriginal: req.file.originalname, archivo: comprobanteArchivo,
@@ -1099,6 +1133,44 @@ app.post("/api/:slug/reservas", resolveClub, upload.single("comprobante"), async
   } catch (error) { next(error); }
 });
 
+// El link viaja por WhatsApp, asi que no exige sesion: la firma es la credencial.
+app.get("/api/:slug/comprobantes/:id", resolveClub, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const clubId = req.club.id;
+    if (!Number.isFinite(id) || !firmaValida(`comprobante:${clubId}:${id}`, req.query.sig)) {
+      return res.status(404).json({ error: "Comprobante no encontrado." });
+    }
+
+    let archivo = null;
+    if (USE_SUPABASE) {
+      const { data } = await supabase
+        .from("reservas").select("comprobante_archivo").eq("id", id).eq("club_id", clubId).maybeSingle();
+      archivo = data?.comprobante_archivo || null;
+    } else {
+      const row = await dbGet(
+        "SELECT comprobante_archivo FROM reservas WHERE id = ? AND club_id = ? LIMIT 1",
+        [id, clubId]
+      );
+      archivo = row?.comprobante_archivo || null;
+    }
+    if (!archivo) return res.status(404).json({ error: "Comprobante no encontrado." });
+
+    if (USE_SUPABASE) {
+      const { data, error } = await supabase.storage
+        .from(SUPABASE_BUCKET).createSignedUrl(archivo, 60);
+      if (error || !data?.signedUrl) return res.status(404).json({ error: "Comprobante no encontrado." });
+      return res.redirect(data.signedUrl);
+    }
+    // Reservas viejas quedaron sueltas en uploads/ antes de mover a comprobantes/.
+    const nombreArchivo = path.basename(archivo);
+    const candidatos = [path.join(COMPROBANTES_DIR, nombreArchivo), path.join(UPLOADS_DIR, nombreArchivo)];
+    const encontrado = candidatos.find((p) => fsSync.existsSync(p));
+    if (!encontrado) return res.status(404).json({ error: "Comprobante no encontrado." });
+    return res.sendFile(encontrado);
+  } catch (error) { return next(error); }
+});
+
 app.get("/api/:slug/admin/reservas", resolveClub, requireAdmin, async (req, res, next) => {
   try {
     const fecha = (req.query.fecha || "").trim();
@@ -1106,9 +1178,7 @@ app.get("/api/:slug/admin/reservas", resolveClub, requireAdmin, async (req, res,
     const reservasConLink = reservas.map((r) => ({
       ...r,
       pasada: isReservaExpirada(r),
-      comprobanteUrl: USE_SUPABASE
-        ? supabase.storage.from(SUPABASE_BUCKET).getPublicUrl(r.comprobante.archivo).data.publicUrl
-        : `/uploads/${r.comprobante.archivo}`,
+      comprobanteUrl: urlComprobante(req.club.slug, req.club.id, r.id),
     }));
     res.json(reservasConLink);
   } catch (error) { next(error); }
@@ -1128,8 +1198,9 @@ app.delete("/api/:slug/admin/reservas/:id", resolveClub, requireAdmin, async (re
       if (error) throw new Error(error.message);
     } else {
       await dbRun("DELETE FROM reservas WHERE id = ?", [id]);
-      const filePath = path.join(UPLOADS_DIR, eliminada.comprobante.archivo);
-      fs.unlink(filePath).catch(() => {});
+      const nombreArchivo = path.basename(eliminada.comprobante.archivo);
+      fs.unlink(path.join(COMPROBANTES_DIR, nombreArchivo)).catch(() => {});
+      fs.unlink(path.join(UPLOADS_DIR, nombreArchivo)).catch(() => {});
     }
     return res.json({ ok: true, reserva: eliminada });
   } catch (error) { next(error); }
@@ -1644,13 +1715,14 @@ app.patch("/api/superadmin/clubs/:id/logo", requireSuperAdmin, logoUpload.single
       return res.json({ ok: true, logoUrl });
     }
     if (USE_SUPABASE) {
+      // Bucket propio y publico: el de comprobantes es privado.
       const storagePath = `logos/${filename}`;
       const { error: uploadErr } = await supabase.storage
-        .from(SUPABASE_BUCKET).upload(storagePath, req.file.buffer, {
+        .from(SUPABASE_LOGOS_BUCKET).upload(storagePath, req.file.buffer, {
           contentType: req.file.mimetype, upsert: true,
         });
       if (uploadErr) throw new Error(uploadErr.message);
-      const { data: { publicUrl } } = supabase.storage.from(SUPABASE_BUCKET).getPublicUrl(storagePath);
+      const { data: { publicUrl } } = supabase.storage.from(SUPABASE_LOGOS_BUCKET).getPublicUrl(storagePath);
       await supabase.from("clubs").update({ logo_url: publicUrl }).eq("id", id);
       return res.json({ ok: true, logoUrl: publicUrl });
     }
@@ -1732,8 +1804,8 @@ app.post("/api/solicitudes", upload.single("comprobante"), async (req, res, next
         .from(SUPABASE_BUCKET)
         .upload(filename, req.file.buffer, { contentType: req.file.mimetype, upsert: false });
       if (upErr) throw new Error(upErr.message);
-      const { data: urlData } = supabase.storage.from(SUPABASE_BUCKET).getPublicUrl(filename);
-      comprobanteUrl = urlData?.publicUrl || null;
+      // Se guarda la ruta, no una URL publica: se sirve firmada al superadmin.
+      comprobanteUrl = filename;
       const { data, error } = await supabase.from("solicitudes").insert({
         nombre, slug, deporte, whatsapp, email, comprobante_url: comprobanteUrl, plan, estado: "pendiente", creado_en: now,
       }).select().single();
@@ -1744,19 +1816,60 @@ app.post("/api/solicitudes", upload.single("comprobante"), async (req, res, next
   } catch (error) { next(error); }
 });
 
+function conLinkComprobante(rows) {
+  return (rows || []).map((r) => ({
+    ...r,
+    comprobanteUrl: r.comprobante_url ? urlComprobanteSolicitud(r.id) : null,
+  }));
+}
+
 app.get("/api/superadmin/solicitudes", requireSuperAdmin, async (_req, res, next) => {
   try {
     if (USE_SQLITE) {
       const rows = await dbAll("SELECT * FROM solicitudes ORDER BY creado_en DESC");
-      return res.json(rows);
+      return res.json(conLinkComprobante(rows));
     }
     if (USE_SUPABASE) {
       const { data, error } = await supabase.from("solicitudes").select("*").order("creado_en", { ascending: false });
       if (error) throw new Error(error.message);
-      return res.json(data || []);
+      return res.json(conLinkComprobante(data));
     }
     return res.json([]);
   } catch (error) { next(error); }
+});
+
+// Firmado en vez de requireSuperAdmin: un <a href> no puede mandar el header.
+app.get("/api/superadmin/solicitudes/:id/comprobante", async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || !firmaValida(`solicitud:${id}`, req.query.sig)) {
+      return res.status(404).json({ error: "Comprobante no encontrado." });
+    }
+
+    let guardado = null;
+    if (USE_SQLITE) {
+      const row = await dbGet("SELECT comprobante_url FROM solicitudes WHERE id = ? LIMIT 1", [id]);
+      guardado = row?.comprobante_url || null;
+    } else if (USE_SUPABASE) {
+      const { data } = await supabase
+        .from("solicitudes").select("comprobante_url").eq("id", id).maybeSingle();
+      guardado = data?.comprobante_url || null;
+    }
+    if (!guardado) return res.status(404).json({ error: "Comprobante no encontrado." });
+
+    if (USE_SUPABASE) {
+      // Las solicitudes viejas guardaron la URL publica entera, no la ruta.
+      const marca = `/object/public/${SUPABASE_BUCKET}/`;
+      const corte = guardado.indexOf(marca);
+      const ruta = corte === -1 ? guardado : decodeURIComponent(guardado.slice(corte + marca.length));
+      const { data, error } = await supabase.storage.from(SUPABASE_BUCKET).createSignedUrl(ruta, 60);
+      if (error || !data?.signedUrl) return res.status(404).json({ error: "Comprobante no encontrado." });
+      return res.redirect(data.signedUrl);
+    }
+    const archivo = path.join(SOLICITUDES_DIR, path.basename(guardado));
+    if (!fsSync.existsSync(archivo)) return res.status(404).json({ error: "Comprobante no encontrado." });
+    return res.sendFile(archivo);
+  } catch (error) { return next(error); }
 });
 
 app.patch("/api/superadmin/solicitudes/:id/aprobar", requireSuperAdmin, async (req, res, next) => {
