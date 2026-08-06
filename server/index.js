@@ -238,6 +238,15 @@ async function initDb() {
   if (!reservaColSet.has("estado")) {
     await dbRun("ALTER TABLE reservas ADD COLUMN estado TEXT NOT NULL DEFAULT 'pendiente'");
   }
+  // El chequeo en JS no alcanza: dos reservas simultaneas del mismo turno lo pasan
+  // las dos. La garantia real es este indice.
+  try {
+    await dbRun(
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_reservas_turno ON reservas (club_id, cancha, fecha, horario)"
+    );
+  } catch (error) {
+    console.warn("[init] No se pudo crear el indice unico de reservas (revisa duplicados):", error.message);
+  }
 
   await dbRun(`
     CREATE TABLE IF NOT EXISTS bloqueos (
@@ -647,6 +656,15 @@ function isReservaBloqueada(bloqueos, cancha, fecha, horario) {
   });
 }
 
+const TURNO_OCUPADO = "Ese horario ya fue reservado. Elegi otro.";
+
+// 23505 = unique_violation en Postgres; SQLITE_CONSTRAINT su equivalente.
+function esTurnoDuplicado(error) {
+  if (!error) return false;
+  if (error.code === "23505" || error.code === "SQLITE_CONSTRAINT") return true;
+  return /unique/i.test(error.message || "");
+}
+
 function mapReservaRow(row) {
   return {
     id: row.id,
@@ -985,14 +1003,22 @@ app.get("/api/:slug/mis-reservas", resolveClub, async (req, res, next) => {
 });
 
 app.post("/api/:slug/reservas", resolveClub, upload.single("comprobante"), async (req, res, next) => {
+  // multer ya guardo el archivo en disco antes de entrar aca: si la reserva se
+  // rechaza hay que borrarlo o queda huerfano en uploads/.
+  const descartarSubida = () => {
+    if (req.file?.path) fs.unlink(req.file.path).catch(() => {});
+  };
   try {
     const validationError = validateReservaPayload(req.body, req.club);
-    if (validationError) return res.status(400).json({ error: validationError });
+    if (validationError) {
+      descartarSubida();
+      return res.status(400).json({ error: validationError });
+    }
     if (!req.file) return res.status(400).json({ error: "Debes subir un comprobante." });
 
     const validMagic = await validateFileMagicBytes(req.file);
     if (!validMagic) {
-      if (req.file.path) fs.unlink(req.file.path).catch(() => {});
+      descartarSubida();
       return res.status(400).json({ error: "El archivo no es válido. Solo JPG, PNG, WEBP o PDF." });
     }
 
@@ -1009,9 +1035,11 @@ app.post("/api/:slug/reservas", resolveClub, upload.single("comprobante"), async
     ]);
     // Solo turnos vigentes bloquean el horario (el historial vencido se conserva)
     if (reservas.some((r) => !isReservaExpirada(r) && r.cancha === cancha && r.fecha === fecha && r.horario === horario)) {
-      return res.status(409).json({ error: "Ese horario ya fue reservado. Elegi otro." });
+      descartarSubida();
+      return res.status(409).json({ error: TURNO_OCUPADO });
     }
     if (isReservaBloqueada(bloqueos, cancha, fecha, horario)) {
+      descartarSubida();
       return res.status(409).json({ error: "Ese horario esta bloqueado por administracion." });
     }
 
@@ -1034,20 +1062,31 @@ app.post("/api/:slug/reservas", resolveClub, upload.single("comprobante"), async
         comprobante_size: req.file.size,
         creado_en: creadoEn,
       }).select().single();
-      if (insertError) throw new Error(insertError.message);
+      if (insertError) {
+        await supabase.storage.from(SUPABASE_BUCKET).remove([storagePath]).catch(() => {});
+        if (esTurnoDuplicado(insertError)) return res.status(409).json({ error: TURNO_OCUPADO });
+        throw new Error(insertError.message);
+      }
       reservaId = insertData.id;
     } else {
       comprobanteArchivo = req.file.filename;
       comprobanteUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
-      const insertResult = await dbRun(
-        `INSERT INTO reservas
-          (club_id, nombre, telefono, cancha, fecha, horario,
-           comprobante_nombre_original, comprobante_archivo, comprobante_mimetype,
-           comprobante_size, creado_en)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [clubId, nombre, telefono, cancha, fecha, horario,
-         req.file.originalname, req.file.filename, req.file.mimetype, req.file.size, creadoEn]
-      );
+      let insertResult;
+      try {
+        insertResult = await dbRun(
+          `INSERT INTO reservas
+            (club_id, nombre, telefono, cancha, fecha, horario,
+             comprobante_nombre_original, comprobante_archivo, comprobante_mimetype,
+             comprobante_size, creado_en)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [clubId, nombre, telefono, cancha, fecha, horario,
+           req.file.originalname, req.file.filename, req.file.mimetype, req.file.size, creadoEn]
+        );
+      } catch (error) {
+        descartarSubida();
+        if (esTurnoDuplicado(error)) return res.status(409).json({ error: TURNO_OCUPADO });
+        throw error;
+      }
       reservaId = insertResult.lastID;
     }
 

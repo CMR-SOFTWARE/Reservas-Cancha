@@ -74,6 +74,20 @@ create table if not exists bloqueos (
   creado_en text not null
 );
 
+-- Bloqueos recurrentes por dia de semana (0 = domingo)
+create table if not exists bloqueos_recurrentes (
+  id bigserial primary key,
+  club_id bigint not null references clubs(id),
+  cancha text not null,
+  dia_semana integer not null,
+  horario_desde text,
+  horario_hasta text,
+  dia_completo boolean not null default false,
+  motivo text not null default '',
+  activo boolean not null default true,
+  creado_en text not null
+);
+
 -- Solicitudes de registro de nuevos clubs
 create table if not exists solicitudes (
   id bigserial primary key,
@@ -88,10 +102,19 @@ create table if not exists solicitudes (
   creado_en text not null
 );
 
+-- Un turno no puede reservarse dos veces. El chequeo en JS no evita que dos
+-- reservas simultaneas del mismo turno entren las dos: esta es la garantia real.
+-- Si falla, hay duplicados previos. Encontralos con:
+--   select club_id, cancha, fecha, horario, count(*)
+--   from reservas group by 1,2,3,4 having count(*) > 1;
+create unique index if not exists idx_reservas_turno
+  on reservas (club_id, cancha, fecha, horario);
+
 -- RLS deshabilitado (el backend usa service key y controla el acceso)
 alter table clubs disable row level security;
 alter table canchas disable row level security;
 alter table admins disable row level security;
 alter table reservas disable row level security;
 alter table bloqueos disable row level security;
+alter table bloqueos_recurrentes disable row level security;
 alter table solicitudes disable row level security;
