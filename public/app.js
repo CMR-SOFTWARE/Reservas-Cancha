@@ -54,6 +54,24 @@ function todayISO() {
   return new Date(date - tzOffset).toISOString().split("T")[0];
 }
 
+function isoSumandoDias(dias) {
+  const date = new Date();
+  date.setDate(date.getDate() + dias);
+  const tzOffset = date.getTimezoneOffset() * 60000;
+  return new Date(date - tzOffset).toISOString().split("T")[0];
+}
+
+// "2026-08-14" -> "Viernes 14 de agosto". Se arma con las partes para que no
+// corra un dia por zona horaria (new Date("2026-08-14") es UTC).
+function fechaEnPalabras(fechaIso) {
+  const [year, month, day] = String(fechaIso).split("-").map(Number);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return "";
+  const texto = new Date(year, month - 1, day)
+    .toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" })
+    .replace(",", "");
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
+
 function isHorarioPasado(fechaIso, horario) {
   const [year, month, day] = String(fechaIso).split("-").map(Number);
   const [hour = 0, minute = 0] = String(horario).split(":").map(Number);
@@ -82,15 +100,18 @@ async function loadConfig() {
   const linkAdmin = document.getElementById("linkAdmin");
   if (linkAdmin) linkAdmin.href = `/${CLUB_SLUG}/admin`;
 
-  // Actualizar titulo con nombre del club
-  const h1 = document.querySelector("h1");
-  if (h1 && config.nombre) h1.textContent = `Reservas - ${config.nombre}`;
+  // El nombre del club va al header; el h1 es siempre "Reservar una cancha".
+  const clubNombre = document.getElementById("clubNombre");
+  if (clubNombre && config.nombre) {
+    clubNombre.textContent = config.nombre;
+    document.title = `${config.nombre} · Reservar una cancha`;
+  }
 
-  // Logo o avatar con iniciales en la navbar
+  // Logo o avatar con iniciales en el header
   const navLogo = document.getElementById("navLogo");
   if (navLogo) {
     if (config.logoUrl) {
-      navLogo.outerHTML = `<img id="navLogo" src="${escapeHtml(config.logoUrl)}" alt="${escapeHtml(config.nombre)}" class="h-12 w-12 md:h-14 md:w-14 rounded-full object-cover ring-1 ring-zinc-600" />`;
+      navLogo.outerHTML = `<img id="navLogo" src="${escapeHtml(config.logoUrl)}" alt="${escapeHtml(config.nombre)}" class="site-logo" />`;
     } else {
       const initials = config.nombre.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || "").join("");
       navLogo.textContent = initials;
@@ -283,12 +304,51 @@ btnVolverPaso1.addEventListener("click", () => {
   setMensaje("");
 });
 
-btnSolicitarCancelacion.addEventListener("click", () => {
-  if (!config?.whatsappNumero) { setMensaje("No hay numero de WhatsApp configurado."); return; }
-  const confirmar = window.confirm("¿Estas seguro de que queres solicitar la cancelacion del turno?");
-  if (!confirmar) return;
-  window.location.href = buildCancelacionWhatsAppUrl();
-});
+// La cancelacion ahora se pide desde cada turno en "Mis turnos".
+if (btnSolicitarCancelacion) {
+  btnSolicitarCancelacion.addEventListener("click", () => {
+    if (!config?.whatsappNumero) { setMensaje("No hay numero de WhatsApp configurado."); return; }
+    const confirmar = window.confirm("¿Estas seguro de que queres solicitar la cancelacion del turno?");
+    if (!confirmar) return;
+    window.location.href = buildCancelacionWhatsAppUrl();
+  });
+}
+
+// ── Chips de fecha rapida ─────────────────────────────────────
+// Solo escriben el value del input y disparan "change": la carga de horarios
+// sigue colgando del mismo listener de siempre.
+const chipHoy = document.getElementById("chipHoy");
+const chipManana = document.getElementById("chipManana");
+const chipOtro = document.getElementById("chipOtro");
+const fechaEnPalabrasEl = document.getElementById("fechaEnPalabras");
+
+function setFecha(iso) {
+  fechaInput.value = iso;
+  fechaInput.dispatchEvent(new Event("change"));
+}
+
+function syncFecha() {
+  const valor = fechaInput.value;
+  if (fechaEnPalabrasEl) fechaEnPalabrasEl.textContent = fechaEnPalabras(valor);
+  if (chipHoy) chipHoy.setAttribute("aria-pressed", String(valor === todayISO()));
+  if (chipManana) chipManana.setAttribute("aria-pressed", String(valor === isoSumandoDias(1)));
+  if (chipOtro) {
+    const esOtro = Boolean(valor) && valor !== todayISO() && valor !== isoSumandoDias(1);
+    chipOtro.setAttribute("aria-pressed", String(esOtro));
+  }
+}
+
+if (chipHoy) chipHoy.addEventListener("click", () => setFecha(todayISO()));
+if (chipManana) chipManana.addEventListener("click", () => setFecha(isoSumandoDias(1)));
+if (chipOtro) {
+  chipOtro.addEventListener("click", () => {
+    fechaInput.focus();
+    if (typeof fechaInput.showPicker === "function") {
+      try { fechaInput.showPicker(); } catch (_) { /* algunos navegadores lo bloquean */ }
+    }
+  });
+}
+fechaInput.addEventListener("change", syncFecha);
 
 formReserva.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -388,6 +448,7 @@ btnMisReservas.addEventListener("click", async () => {
 async function init() {
   fechaInput.min = todayISO();
   fechaInput.value = todayISO();
+  syncFecha();
   try {
     await refreshHorarios();
   } catch (error) { setMensaje(error.message || "Error inicializando la aplicacion."); }

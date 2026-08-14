@@ -27,13 +27,17 @@ body {
 h1, h2, h3 { text-wrap: balance; }
 p { text-wrap: pretty; }
 
-h1 {
+/* Va por clase, no por elemento: el preflight de Tailwind se inyecta despues
+   que esta hoja y resetea h1 a font-size/weight heredados. */
+h1, .page-title {
   font-size: var(--fs-2xl);
   font-weight: var(--fw-bold);
   line-height: var(--lh-tight);
   color: var(--c-ink-900);
 }
-@media (min-width: 768px) { h1 { font-size: var(--fs-3xl); } }
+@media (min-width: 768px) {
+  h1, .page-title { font-size: var(--fs-3xl); }
+}
 
 .page-sub {
   margin-top: var(--s-2);
