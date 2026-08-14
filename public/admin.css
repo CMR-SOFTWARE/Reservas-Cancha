@@ -1,0 +1,154 @@
+/* ============================================================
+   Panel admin del club. Se apoya en tokens.css + styles.css y
+   agrega solo lo propio del panel: login, shell, nav y metricas.
+   ============================================================ */
+
+/* ── Login como pantalla propia ───────────────────────────── */
+.login-pantalla {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  padding: var(--s-6) var(--pad-page);
+}
+.login-card { width: 100%; max-width: 400px; box-shadow: var(--sh-sm); }
+.login-logo { width: 48px; height: 48px; border-radius: var(--r-sm); object-fit: contain; }
+.login-titulo {
+  margin-top: var(--s-4);
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-snug);
+  color: var(--c-ink-900);
+}
+
+/* Input con un boton pegado a la derecha (Mostrar / Ocultar clave) */
+.input-con-accion { position: relative; display: flex; align-items: center; }
+.input-con-accion .input { padding-right: 92px; }
+.input-con-accion .btn { position: absolute; right: var(--s-2); }
+
+/* ── Topbar ───────────────────────────────────────────────── */
+.topbar-acciones { display: flex; align-items: center; gap: var(--s-2); }
+.topbar-btn { color: rgba(255, 255, 255, 0.85); }
+.topbar-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.12); }
+
+/* ── Shell: nav + contenido ───────────────────────────────── */
+.panel-shell {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+}
+
+.panel-nav {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  gap: var(--s-1);
+  padding: var(--s-2) var(--pad-page);
+  overflow-x: auto;
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-border);
+  -webkit-overflow-scrolling: touch;
+}
+
+.panel-nav-item {
+  display: inline-flex;
+  flex: none;
+  gap: var(--s-2);
+  align-items: center;
+  height: 48px;
+  padding: 0 var(--s-4);
+  font-size: var(--fs-base);
+  font-weight: var(--fw-medium);
+  color: var(--c-ink-700);
+  white-space: nowrap;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: background-color var(--t-fast), color var(--t-fast);
+}
+.panel-nav-item svg { width: 20px; height: 20px; }
+.panel-nav-item:hover { background: var(--c-surface-2); }
+.panel-nav-item.is-activa {
+  font-weight: var(--fw-semi);
+  color: var(--c-brand-800);
+  background: var(--c-brand-50);
+}
+
+.panel-contenido {
+  flex: 1;
+  width: 100%;
+  max-width: var(--w-page);
+  margin-inline: auto;
+  padding: var(--pad-page);
+}
+
+@media (min-width: 1024px) {
+  .panel-shell { flex-direction: row; }
+  .panel-nav {
+    position: sticky;
+    top: 0;
+    flex: none;
+    flex-direction: column;
+    align-self: flex-start;
+    width: 220px;
+    height: 100vh;
+    padding: var(--s-4) var(--s-3);
+    overflow-x: visible;
+    border-right: 1px solid var(--c-border);
+    border-bottom: 0;
+  }
+  .panel-nav-item { height: 44px; padding: 0 var(--s-4); font-size: var(--fs-base); }
+  /* La barra activa a la izquierda: borde de 3px sin mover el texto. */
+  .panel-nav-item.is-activa { box-shadow: inset 3px 0 0 var(--c-brand-700); }
+  .panel-contenido { padding: var(--s-8) var(--pad-page-md); margin-inline: 0; }
+}
+
+/* ── Metricas del resumen ─────────────────────────────────── */
+.metricas {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--s-3);
+  margin-top: var(--s-5);
+}
+@media (min-width: 768px) {
+  .metricas { grid-template-columns: repeat(4, 1fr); gap: var(--s-4); }
+}
+
+.metrica {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  padding: var(--s-4);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-xs);
+}
+.metrica-label { font-size: var(--fs-sm); color: var(--c-ink-500); }
+.metrica-valor {
+  font-size: var(--fs-2xl);
+  font-weight: var(--fw-bold);
+  line-height: 1.1;
+  color: var(--c-ink-900);
+}
+
+/* ── Grilla de cards (bloqueos, reservas) ─────────────────── */
+.grilla-cards {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--s-4);
+}
+@media (min-width: 768px) { .grilla-cards { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1200px) { .grilla-cards { grid-template-columns: repeat(3, 1fr); } }
+
+/* ── Bloqueo en card ──────────────────────────────────────── */
+.bloqueo-card {
+  padding: var(--s-4);
+  background: var(--c-surface);
+  border: 1px solid var(--c-block-border);
+  border-radius: var(--r-md);
+}
+.bloqueo-cancha { font-size: var(--fs-md); font-weight: var(--fw-bold); color: var(--c-ink-900); }
+.bloqueo-motivo { font-size: var(--fs-sm); color: var(--c-ink-500); }
