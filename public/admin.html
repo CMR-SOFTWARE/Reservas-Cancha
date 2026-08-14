@@ -16,11 +16,21 @@
       <div class="site-header-inner">
         <a href="/" class="site-brand">
           <img src="/favicon.png" alt="" class="site-logo" />
-          <span class="site-club">CMR Canchas · Panel</span>
+          <span class="site-texto"><span class="site-club">CMR Canchas</span><span class="site-sufijo"> · Panel</span></span>
         </a>
         <div class="topbar-acciones" id="topbarAcciones" hidden>
-          <a id="linkMenu" href="#" class="btn btn--ghost btn--sm topbar-btn">Ver el sitio</a>
-          <button id="btnLogout" class="btn btn--ghost btn--sm topbar-btn" type="button">Cerrar sesión</button>
+          <a id="linkMenu" href="#" class="btn btn--ghost btn--sm topbar-btn" title="Ver el sitio">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/>
+            </svg>
+            <span class="topbar-texto">Ver el sitio</span>
+          </a>
+          <button id="btnLogout" class="btn btn--ghost btn--sm topbar-btn" type="button" title="Cerrar sesión">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>
+            </svg>
+            <span class="topbar-texto">Cerrar sesión</span>
+          </button>
         </div>
       </div>
     </header>
@@ -66,7 +76,7 @@
           Cancelaciones
         </button>
         <button type="button" class="panel-nav-item" data-seccion="configuracion">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 7 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9H1a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 2.6 7a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H7a1.7 1.7 0 0 0 1-1.5V1a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V7a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5l1.4 2.6 2.9-.5.5 2.9 2.6 1.4-1.5 2.5 1.5 2.5-2.6 1.4-.5 2.9-2.9-.5L12 21.5l-1.4-2.6-2.9.5-.5-2.9-2.6-1.4L6.1 12 4.6 9.5l2.6-1.4.5-2.9 2.9.5z"/></svg>
           Configuración
         </button>
       </nav>

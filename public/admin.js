@@ -92,8 +92,9 @@ async function loadConfig() {
   // El nombre del club va al header y al login, no al h1 de la seccion.
   if (config.nombre) {
     document.title = `${config.nombre} · Panel`;
+    // Solo el nombre: el " · Panel" es un span aparte que se oculta en mobile.
     const clubEnHeader = document.querySelector(".site-club");
-    if (clubEnHeader) clubEnHeader.textContent = `${config.nombre} · Panel`;
+    if (clubEnHeader) clubEnHeader.textContent = config.nombre;
     const loginClub = document.getElementById("loginClub");
     if (loginClub) loginClub.textContent = config.nombre;
   }

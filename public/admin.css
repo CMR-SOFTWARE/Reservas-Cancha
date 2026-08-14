@@ -27,9 +27,28 @@
 .input-con-accion .btn { position: absolute; right: var(--s-2); }
 
 /* ── Topbar ───────────────────────────────────────────────── */
-.topbar-acciones { display: flex; align-items: center; gap: var(--s-2); }
-.topbar-btn { color: rgba(255, 255, 255, 0.85); }
+.topbar-acciones { display: flex; flex: none; align-items: center; gap: var(--s-2); }
+.topbar-btn { color: rgba(255, 255, 255, 0.85); white-space: nowrap; }
 .topbar-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.12); }
+/* Nombre y sufijo van juntos: como hermanos del logo tomaban el gap del flex
+   y quedaba un hueco raro entre "Mi Club" y "· Panel". */
+.site-texto { display: flex; min-width: 0; align-items: baseline; }
+.site-texto .site-club { min-width: 0; }
+.site-sufijo { display: none; }
+
+/* En pantallas angostas los dos botones con texto no entran y se partian en
+   dos lineas, ademas de comerse el nombre del club: quedan solo los iconos. */
+@media (max-width: 639px) {
+  .topbar-texto {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+  }
+  .topbar-btn { width: 44px; padding: 0; }
+}
+
+@media (min-width: 640px) {
+  .site-sufijo { display: inline; color: #fff; font-weight: var(--fw-bold); }
+}
 
 /* ── Shell: nav + contenido ───────────────────────────────── */
 .panel-shell {
@@ -93,9 +112,11 @@
     flex-direction: column;
     align-self: flex-start;
     width: 220px;
-    height: 100vh;
+    /* Menos la topbar: con 100vh los ultimos items quedaban fuera de vista. */
+    max-height: calc(100vh - 72px);
     padding: var(--s-4) var(--s-3);
     overflow-x: visible;
+    overflow-y: auto;
     border-right: 1px solid var(--c-border);
     border-bottom: 0;
   }
