@@ -24,7 +24,6 @@ const bloqCancha = document.getElementById("bloqCancha");
 const bloqFecha = document.getElementById("bloqFecha");
 const bloqHorarioDesde = document.getElementById("bloqHorarioDesde");
 const bloqHorarioHasta = document.getElementById("bloqHorarioHasta");
-const bloqDiaCompleto = document.getElementById("bloqDiaCompleto");
 const bloqMotivo = document.getElementById("bloqMotivo");
 const btnCrearBloqueo = document.getElementById("btnCrearBloqueo");
 const bloqueosList = document.getElementById("bloqueosList");
@@ -45,9 +44,21 @@ function formatFecha(fechaIso) {
   return `${dd}/${mm}/${yyyy}`;
 }
 
+const ICONO_ALERTA = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>`;
+const ICONO_OK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>`;
+
+// Los mensajes eran parrafos de color al final del bloque; ahora son Alerts.
+// Los de exito se cierran solos a los 4s, los de error se quedan.
 function setMessage(el, text, isError = true) {
-  el.textContent = text;
-  el.style.color = isError ? "#c62020" : "#1d6d2b";
+  if (!el) return;
+  if (!text) { el.innerHTML = ""; return; }
+  el.innerHTML = `<div class="alert ${isError ? "alert--error" : "alert--success"}" role="${isError ? "alert" : "status"}">
+    ${isError ? ICONO_ALERTA : ICONO_OK}<span>${escapeHtml(text)}</span>
+  </div>`;
+  if (!isError) {
+    clearTimeout(el._timer);
+    el._timer = setTimeout(() => { el.innerHTML = ""; }, 4000);
+  }
 }
 
 async function api(url, options = {}) {
@@ -84,6 +95,11 @@ async function loadConfig() {
     .join("");
   bloqHorarioDesde.innerHTML = horarioOptions;
   bloqHorarioHasta.innerHTML = horarioOptions;
+  const bloqHorarioEl = document.getElementById("bloqHorario");
+  if (bloqHorarioEl) bloqHorarioEl.innerHTML = horarioOptions;
+  // Recien ahora los selects tienen opciones: la vista previa necesita la
+  // etiqueta de la cancha para armarse.
+  if (typeof sincronizarFormBloqueo === "function") sincronizarFormBloqueo();
 
   // Actualizar link de volver al menu
   const linkMenu = document.getElementById("linkMenu");
@@ -121,6 +137,17 @@ async function loadConfig() {
     recHorarioDesdeEl.innerHTML = horarioOpts;
     recHorarioHastaEl.innerHTML = horarioOpts;
   }
+}
+
+// Duplicada de app.js a proposito: los dos scripts son independientes y no hay
+// build. Si crecen mas helpers compartidos, conviene un public/comun.js.
+function fechaEnPalabras(fechaIso) {
+  const [year, month, day] = String(fechaIso).split("-").map(Number);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return "";
+  const texto = new Date(year, month - 1, day)
+    .toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" })
+    .replace(",", "");
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
 function isoSumandoDias(dias) {
@@ -392,27 +419,133 @@ btnLogout.addEventListener("click", () => {
   window.location.href = `/${CLUB_SLUG}`;
 });
 
-btnCrearBloqueo.addEventListener("click", async () => {
-  try {
-    const payload = {
-      cancha: bloqCancha.value,
-      fecha: bloqFecha.value,
-      horario: bloqHorarioDesde.value,
-      horarioDesde: bloqDiaCompleto.checked ? "" : bloqHorarioDesde.value,
-      horarioHasta: bloqDiaCompleto.checked ? "" : bloqHorarioHasta.value,
-      diaCompleto: bloqDiaCompleto.checked,
-      motivo: bloqMotivo.value.trim(),
-    };
-    await api(`/api/${CLUB_SLUG}/admin/bloqueos`, { method: "POST", body: JSON.stringify(payload) });
-    setMessage(adminMessage, "Bloqueo creado correctamente.", false);
-    await refreshAdminData();
-  } catch (error) { setMessage(adminMessage, error.message || "No se pudo crear el bloqueo."); }
+// ── Formulario de bloqueo ─────────────────────────────────────
+// El checkbox "Dia completo" convivia con los dos selects de horario sin
+// desactivarlos. Ahora hay tres opciones excluyentes y los campos de hora se
+// muestran segun cual este elegida. El payload al backend es el mismo.
+const bloqHorario = document.getElementById("bloqHorario");
+const campoHorarioUnico = document.getElementById("campoHorarioUnico");
+const campoRango = document.getElementById("campoRango");
+const bloqPreview = document.getElementById("bloqPreview");
+const bloqFechaEnPalabras = document.getElementById("bloqFechaEnPalabras");
+
+function tipoDeBloqueo() {
+  return document.querySelector('input[name="bloqTipo"]:checked')?.value || "horario";
+}
+
+function armarPayloadBloqueo() {
+  const tipo = tipoDeBloqueo();
+  return {
+    cancha: bloqCancha.value,
+    fecha: bloqFecha.value,
+    horario: tipo === "horario" ? bloqHorario.value : "",
+    horarioDesde: tipo === "rango" ? bloqHorarioDesde.value : "",
+    horarioHasta: tipo === "rango" ? bloqHorarioHasta.value : "",
+    diaCompleto: tipo === "dia",
+    motivo: bloqMotivo.value.trim(),
+  };
+}
+
+function describirBloqueoElegido() {
+  const tipo = tipoDeBloqueo();
+  const cancha = bloqCancha.options[bloqCancha.selectedIndex]?.text || bloqCancha.value;
+  const dia = fechaEnPalabras(bloqFecha.value);
+  if (!cancha || !dia) return "";
+  if (tipo === "dia") return `Vas a bloquear ${cancha} el ${dia.toLowerCase()}, todo el día.`;
+  if (tipo === "rango") return `Vas a bloquear ${cancha} el ${dia.toLowerCase()} de ${bloqHorarioDesde.value} a ${bloqHorarioHasta.value}.`;
+  return `Vas a bloquear ${cancha} el ${dia.toLowerCase()} a las ${bloqHorario.value}.`;
+}
+
+function sincronizarFormBloqueo() {
+  const tipo = tipoDeBloqueo();
+  campoHorarioUnico.classList.toggle("hidden", tipo !== "horario");
+  campoRango.classList.toggle("hidden", tipo !== "rango");
+
+  if (bloqFechaEnPalabras) bloqFechaEnPalabras.textContent = fechaEnPalabras(bloqFecha.value);
+  const hoy = todayISO();
+  const manana = isoSumandoDias(1);
+  document.getElementById("bloqChipHoy")?.setAttribute("aria-pressed", String(bloqFecha.value === hoy));
+  document.getElementById("bloqChipManana")?.setAttribute("aria-pressed", String(bloqFecha.value === manana));
+  document.getElementById("bloqChipOtro")?.setAttribute("aria-pressed",
+    String(Boolean(bloqFecha.value) && bloqFecha.value !== hoy && bloqFecha.value !== manana));
+
+  const texto = describirBloqueoElegido();
+  bloqPreview.innerHTML = texto
+    ? `<div class="alert alert--info">
+         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8h.01"/></svg>
+         <span>${escapeHtml(texto)}</span>
+       </div>`
+    : "";
+}
+
+document.querySelectorAll('input[name="bloqTipo"]').forEach((radio) => {
+  radio.addEventListener("change", sincronizarFormBloqueo);
+});
+[bloqCancha, bloqFecha, bloqHorario, bloqHorarioDesde, bloqHorarioHasta].forEach((campo) => {
+  campo?.addEventListener("change", sincronizarFormBloqueo);
 });
 
-bloqDiaCompleto.addEventListener("change", () => {
-  bloqHorarioDesde.disabled = bloqDiaCompleto.checked;
-  bloqHorarioHasta.disabled = bloqDiaCompleto.checked;
+function setFechaBloqueo(iso) {
+  bloqFecha.value = iso;
+  sincronizarFormBloqueo();
+}
+document.getElementById("bloqChipHoy")?.addEventListener("click", () => setFechaBloqueo(todayISO()));
+document.getElementById("bloqChipManana")?.addEventListener("click", () => setFechaBloqueo(isoSumandoDias(1)));
+document.getElementById("bloqChipOtro")?.addEventListener("click", () => {
+  bloqFecha.focus();
+  if (typeof bloqFecha.showPicker === "function") {
+    try { bloqFecha.showPicker(); } catch (_) { /* algunos navegadores lo bloquean */ }
+  }
 });
+
+btnCrearBloqueo.addEventListener("click", async () => {
+  const tipo = tipoDeBloqueo();
+  const payload = armarPayloadBloqueo();
+
+  if (!payload.fecha) {
+    setMessage(adminMessage, "Elegí el día que querés bloquear.");
+    return;
+  }
+  // El motivo lo ve el usuario final: obligatorio cuando cierra varias horas.
+  if (tipo !== "horario" && !payload.motivo) {
+    setErrorAdmin("errorBloqMotivo", "bloqMotivo", "Escribí el motivo: se lo mostramos al usuario en el horario bloqueado.");
+    return;
+  }
+  setErrorAdmin("errorBloqMotivo", "bloqMotivo", "");
+
+  const textoOriginal = btnCrearBloqueo.textContent;
+  btnCrearBloqueo.disabled = true;
+  btnCrearBloqueo.classList.add("is-loading");
+  btnCrearBloqueo.textContent = "Guardando…";
+  try {
+    await api(`/api/${CLUB_SLUG}/admin/bloqueos`, { method: "POST", body: JSON.stringify(payload) });
+    setMessage(adminMessage, `Bloqueo creado. ${describirBloqueoElegido().replace("Vas a bloquear ", "")}`, false);
+    bloqMotivo.value = "";
+    await refreshAdminData();
+    sincronizarFormBloqueo();
+  } catch (error) {
+    setMessage(adminMessage, error.message || "No se pudo crear el bloqueo.");
+  } finally {
+    btnCrearBloqueo.disabled = false;
+    btnCrearBloqueo.classList.remove("is-loading");
+    btnCrearBloqueo.textContent = textoOriginal;
+  }
+});
+
+function setErrorAdmin(idError, idCampo, texto) {
+  const caja = document.getElementById(idError);
+  const campo = document.getElementById(idCampo);
+  if (!caja || !campo) return;
+  if (!texto) {
+    caja.hidden = true;
+    campo.removeAttribute("aria-invalid");
+    return;
+  }
+  caja.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg><span>${escapeHtml(texto)}</span>`;
+  caja.hidden = false;
+  campo.setAttribute("aria-invalid", "true");
+  campo.focus();
+}
 
 bloqueosList.addEventListener("click", async (event) => {
   const target = event.target;
@@ -928,6 +1061,7 @@ document.getElementById("btnExportarCSV")?.addEventListener("click", exportarCSV
 
 async function init() {
   bloqFecha.value = todayISO();
+  sincronizarFormBloqueo();
   await loadConfig();
   if (adminToken) {
     try {

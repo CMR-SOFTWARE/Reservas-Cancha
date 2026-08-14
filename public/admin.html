@@ -125,44 +125,87 @@
         <p class="page-sub">Cerrá horarios para que no se puedan reservar.</p>
 
         <section class="card" style="margin-top: var(--s-5)">
-          <div>
-            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <h2 class="card-title">Bloquear cancha</h2>
+          <h2 class="card-title">Bloquear cancha</h2>
+
+          <div class="card-body" style="display: grid; gap: var(--s-6)">
+            <div class="field">
+              <label class="label" for="bloqCancha">
+                <span class="card-num" aria-hidden="true">1</span> Elegí la cancha
+              </label>
+              <select id="bloqCancha" class="select"></select>
             </div>
-            <div class="mb-3 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
-              <div class="flex flex-col gap-1">
-                <label class="font-medium" for="bloqCancha">Cancha</label>
-                <select id="bloqCancha" class="rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"></select>
+
+            <div class="field">
+              <span class="label" id="bloqLabelDia">
+                <span class="card-num" aria-hidden="true">2</span> Elegí el día
+              </span>
+              <div class="chips" role="group" aria-labelledby="bloqLabelDia">
+                <button type="button" class="chip" id="bloqChipHoy" aria-pressed="false">Hoy</button>
+                <button type="button" class="chip" id="bloqChipManana" aria-pressed="false">Mañana</button>
+                <button type="button" class="chip" id="bloqChipOtro" aria-pressed="false">Otro día</button>
               </div>
-              <div class="flex flex-col gap-1">
-                <label class="font-medium" for="bloqFecha">Fecha</label>
-                <input id="bloqFecha" type="date" class="rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
-              </div>
-              <div class="flex flex-col gap-1">
-                <label class="font-medium" for="bloqHorarioDesde">Horario desde</label>
-                <select id="bloqHorarioDesde" class="rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"></select>
-              </div>
-              <div class="flex flex-col gap-1">
-                <label class="font-medium" for="bloqHorarioHasta">Horario hasta</label>
-                <select id="bloqHorarioHasta" class="rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"></select>
+              <label class="sr-only" for="bloqFecha">Fecha</label>
+              <input id="bloqFecha" type="date" class="input" />
+              <p class="help" id="bloqFechaEnPalabras"></p>
+            </div>
+
+            <div class="field">
+              <span class="label" id="bloqLabelTipo">
+                <span class="card-num" aria-hidden="true">3</span> ¿Qué querés bloquear?
+              </span>
+              <div class="opciones" role="radiogroup" aria-labelledby="bloqLabelTipo">
+                <label class="opcion">
+                  <input type="radio" name="bloqTipo" value="horario" checked />
+                  <span>Un horario</span>
+                </label>
+                <label class="opcion">
+                  <input type="radio" name="bloqTipo" value="rango" />
+                  <span>Un rango de horarios</span>
+                </label>
+                <label class="opcion">
+                  <input type="radio" name="bloqTipo" value="dia" />
+                  <span>Todo el día</span>
+                </label>
               </div>
             </div>
-            <div class="mb-3 flex items-center gap-2">
-              <input id="bloqDiaCompleto" type="checkbox" class="h-4 w-4 accent-green-700" />
-              <label for="bloqDiaCompleto" class="font-medium">Dia completo</label>
+
+            <div class="field" id="campoHorarioUnico">
+              <label class="label" for="bloqHorario">Horario</label>
+              <select id="bloqHorario" class="select"></select>
             </div>
-            <div class="mb-3 flex flex-col gap-1">
-              <label class="font-medium" for="bloqMotivo">Motivo</label>
-              <input id="bloqMotivo" type="text" placeholder="Ej: lluvia intensa" class="rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
+
+            <div id="campoRango" class="hidden" style="display: grid; gap: var(--s-4); grid-template-columns: repeat(auto-fit, minmax(160px, 1fr))">
+              <div class="field">
+                <label class="label" for="bloqHorarioDesde">Desde</label>
+                <select id="bloqHorarioDesde" class="select"></select>
+              </div>
+              <div class="field">
+                <label class="label" for="bloqHorarioHasta">Hasta</label>
+                <select id="bloqHorarioHasta" class="select"></select>
+              </div>
             </div>
-            <button id="btnCrearBloqueo" class="rounded-lg bg-green-700 px-4 py-2 font-semibold text-white hover:bg-green-800" type="button">Crear bloqueo</button>
-            <p id="adminMessage" class="mt-2 min-h-5 text-sm font-semibold text-red-700"></p>
+
+            <div class="field">
+              <label class="label" for="bloqMotivo">Motivo</label>
+              <input id="bloqMotivo" type="text" placeholder="Ej: lluvia intensa" class="input" aria-describedby="bloqMotivoAyuda errorBloqMotivo" />
+              <p class="help" id="bloqMotivoAyuda">Se le muestra al usuario en el horario bloqueado.</p>
+              <p class="error-text" id="errorBloqMotivo" hidden></p>
+            </div>
+
+            <div id="bloqPreview"></div>
+
+            <div>
+              <button id="btnCrearBloqueo" class="btn btn--primary btn--lg" type="button" style="min-width: 220px">
+                Bloquear cancha
+              </button>
+              <div id="adminMessage" style="margin-top: var(--s-3)"></div>
+            </div>
           </div>
         </section>
 
-        <section class="mb-4 rounded-xl bg-white p-4 shadow-sm">
-          <h2 class="mb-3 text-xl font-semibold text-green-900">Bloqueos activos</h2>
-          <div id="bloqueosList" class="grilla-cards"></div>
+        <section class="card" style="margin-top: var(--s-5)">
+          <h2 class="card-title">Bloqueos activos</h2>
+          <div id="bloqueosList" class="grilla-cards card-body"></div>
         </section>
 
         <section class="mb-4 rounded-xl bg-white p-4 shadow-sm">
