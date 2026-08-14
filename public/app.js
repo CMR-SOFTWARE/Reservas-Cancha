@@ -171,7 +171,11 @@ function isHorarioPasado(fechaIso, horario) {
   return new Date(year, month - 1, day, hour, minute, 0, 0).getTime() < Date.now();
 }
 
-async function loadConfig() {
+// La config del club no cambia durante la sesion: se pedia de nuevo en cada
+// refreshHorarios(), o sea en cada cambio de cancha o de fecha.
+async function loadConfig({ forzar = false } = {}) {
+  if (config && !forzar) return;
+
   const response = await fetch(`/api/${CLUB_SLUG}/config`);
   if (!response.ok) throw new Error("No se pudo cargar la configuracion.");
   config = await response.json();
@@ -200,7 +204,8 @@ async function loadConfig() {
   const navLogo = document.getElementById("navLogo");
   if (navLogo) {
     if (config.logoUrl) {
-      navLogo.outerHTML = `<img id="navLogo" src="${escapeHtml(config.logoUrl)}" alt="${escapeHtml(config.nombre)}" class="site-logo" />`;
+      // alt vacio: el nombre del club ya esta al lado como texto visible.
+      navLogo.outerHTML = `<img id="navLogo" src="${escapeHtml(config.logoUrl)}" alt="" class="site-logo" />`;
     } else {
       const initials = config.nombre.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || "").join("");
       navLogo.textContent = initials;
@@ -256,6 +261,12 @@ function rangoHorario(horario) {
 const FLECHA_SVG = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>`;
 const CHECK_SVG = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>`;
 
+function mostrarErrorHorarios(texto) {
+  horariosContainer.innerHTML =
+    `<div class="alert alert--error" role="alert" style="grid-column: 1 / -1">${ALERTA_SVG}<span>${escapeHtml(texto)}</span></div>`;
+  if (contadorDisponibles) contadorDisponibles.textContent = "";
+}
+
 function renderSkeletonHorarios() {
   horariosContainer.innerHTML = Array.from(
     { length: 3 },
@@ -304,7 +315,8 @@ function renderHorarios() {
       btn.className = `slot ${clase}`;
       btn.dataset.horario = horario;
       btn.setAttribute("aria-pressed", "false");
-      btn.setAttribute("aria-label", `Reservar ${rangoHorario(horario)}`);
+      // Sin aria-label: el nombre accesible sale del texto visible
+      // ("18:00 - 19:00 Disponible"). Un label distinto rompe WCAG 2.5.3.
       btn.innerHTML = contenido;
       btn.addEventListener("click", () => seleccionarHorario(horario));
       horariosContainer.appendChild(btn);
@@ -479,14 +491,18 @@ function buildWhatsAppUrl(reserva) {
   return `https://wa.me/${config.whatsappNumero}?text=${encodeURIComponent(text)}`;
 }
 
-async function refreshHorarios() {
+async function refreshHorarios({ forzarConfig = false } = {}) {
   if (!fechaInput.value) fechaInput.value = todayISO();
   renderSkeletonHorarios();
+
   const prevCancha = canchaSelect.value;
-  await loadConfig();
-  if ([...canchaSelect.options].some((o) => o.value === prevCancha)) {
+  await loadConfig({ forzar: forzarConfig });
+  // Si se repoblo el select (primera carga o refresco explicito), conservar la
+  // cancha elegida.
+  if (prevCancha && [...canchaSelect.options].some((o) => o.value === prevCancha)) {
     canchaSelect.value = prevCancha;
   }
+
   await Promise.all([
     loadReservas().catch(() => { reservasActuales = []; }),
     loadBloqueos().catch(() => { bloqueosActuales = []; }),
@@ -508,19 +524,31 @@ function buildCancelacionWhatsAppUrl(turno) {
   return `https://wa.me/${config.whatsappNumero}?text=${encodeURIComponent(texto)}`;
 }
 
+// El unico refresco que vuelve a pedir la config: lo pide el usuario a mano.
 btnBuscar.addEventListener("click", async () => {
-  try { await refreshHorarios(); }
-  catch (error) { setMensaje(error.message || "Error al cargar horarios."); }
+  const textoOriginal = btnBuscar.textContent;
+  btnBuscar.disabled = true;
+  btnBuscar.classList.add("is-loading");
+  btnBuscar.textContent = "Buscando…";
+  try {
+    await refreshHorarios({ forzarConfig: true });
+  } catch (error) {
+    mostrarErrorHorarios(mensajeDeError(error));
+  } finally {
+    btnBuscar.disabled = false;
+    btnBuscar.classList.remove("is-loading");
+    btnBuscar.textContent = textoOriginal;
+  }
 });
 
 canchaSelect.addEventListener("change", async () => {
   try { await refreshHorarios(); }
-  catch (error) { setMensaje(error.message || "Error al cargar horarios."); }
+  catch (error) { mostrarErrorHorarios(mensajeDeError(error)); }
 });
 
 fechaInput.addEventListener("change", async () => {
   try { await refreshHorarios(); }
-  catch (error) { setMensaje(error.message || "Error al cargar horarios."); }
+  catch (error) { mostrarErrorHorarios(mensajeDeError(error)); }
 });
 
 telefonoInput.addEventListener("input", () => {
@@ -824,7 +852,7 @@ async function init() {
   syncFecha();
   try {
     await refreshHorarios();
-  } catch (error) { setMensaje(error.message || "Error inicializando la aplicacion."); }
+  } catch (error) { mostrarErrorHorarios(mensajeDeError(error)); }
 }
 
 init();

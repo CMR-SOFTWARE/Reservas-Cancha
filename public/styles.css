@@ -14,6 +14,8 @@ button { background: none; border: 0; }
 
 /* ── Base ─────────────────────────────────────────────────── */
 body {
+  display: flex;
+  flex-direction: column;
   min-height: 100vh;
   margin: 0;
   font-family: var(--font-sans);
@@ -23,6 +25,13 @@ body {
   background: var(--c-bg);
   -webkit-font-smoothing: antialiased;
 }
+
+/* La usa app.js para modales y pasos: la aportaba Tailwind. */
+.hidden { display: none !important; }
+
+/* Cualquier clase con display propio (.card, .error-text) le gana al atributo
+   hidden del navegador, que vive en la hoja del user agent. */
+[hidden] { display: none !important; }
 
 h1, h2, h3 { text-wrap: balance; }
 p { text-wrap: pretty; }
@@ -613,4 +622,29 @@ a:hover { color: var(--c-brand-800); text-decoration: underline; }
 .site-footer-sep {
   margin-block: var(--s-4);
   border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.site-footer-top {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-8);
+}
+.site-footer-marca { display: flex; align-items: center; gap: var(--s-3); }
+.site-footer-marca img { width: 40px; height: 40px; border-radius: var(--r-sm); object-fit: contain; }
+.site-footer-nombre {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-snug);
+  color: #fff;
+}
+.site-footer-contacto { display: flex; flex-direction: column; gap: var(--s-3); text-align: center; }
+.site-footer-contacto a { display: inline-flex; align-items: center; justify-content: center; gap: var(--s-2); }
+.site-footer-contacto svg { flex: none; width: 16px; height: 16px; }
+.site-footer-legal { font-size: var(--fs-xs); text-align: center; }
+
+@media (min-width: 640px) {
+  .site-footer-top { flex-direction: row; justify-content: space-between; }
+  .site-footer-contacto { text-align: right; }
+  .site-footer-contacto a { justify-content: flex-end; }
 }
