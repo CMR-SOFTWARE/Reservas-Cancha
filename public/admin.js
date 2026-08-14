@@ -89,9 +89,15 @@ async function loadConfig() {
   const linkMenu = document.getElementById("linkMenu");
   if (linkMenu) linkMenu.href = `/${CLUB_SLUG}`;
 
-  // Actualizar titulo con nombre del club
-  const h1 = document.querySelector("h1");
-  if (h1 && config.nombre) h1.textContent = `Panel Admin - ${config.nombre}`;
+  // El nombre del club va al header y al login, no al h1 de la seccion.
+  if (config.nombre) {
+    document.title = `${config.nombre} · Panel`;
+    // Solo el nombre: el " · Panel" es un span aparte que se oculta en mobile.
+    const clubEnHeader = document.querySelector(".site-club");
+    if (clubEnHeader) clubEnHeader.textContent = config.nombre;
+    const loginClub = document.getElementById("loginClub");
+    if (loginClub) loginClub.textContent = config.nombre;
+  }
 
   // Poblar selector de cancha del calendario
   const calCanchaEl = document.getElementById("calCancha");
@@ -115,6 +121,13 @@ async function loadConfig() {
     recHorarioDesdeEl.innerHTML = horarioOpts;
     recHorarioHastaEl.innerHTML = horarioOpts;
   }
+}
+
+function isoSumandoDias(dias) {
+  const date = new Date();
+  date.setDate(date.getDate() + dias);
+  const tzOffset = date.getTimezoneOffset() * 60000;
+  return new Date(date - tzOffset).toISOString().split("T")[0];
 }
 
 function getCanchaEtiqueta(nombreCancha) {
@@ -184,18 +197,33 @@ function renderReservas(reservas) {
 }
 
 function renderBloqueos(bloqueos) {
-  if (!bloqueos.length) { bloqueosList.innerHTML = "<p>No hay bloqueos activos.</p>"; return; }
-  bloqueosList.innerHTML = bloqueos.map((b) => `
-    <article class="rounded-lg border border-amber-100 bg-amber-50 p-3">
-      <p><strong>${escapeHtml(getCanchaEtiqueta(b.cancha))}</strong> - ${formatFecha(b.fecha)}</p>
-      <p class="text-sm text-amber-800">${escapeHtml(describeBloqueoHorario(b))}</p>
-      <p class="text-sm text-slate-600">Motivo: ${escapeHtml(b.motivo)}</p>
-      <button class="mt-1 rounded-lg bg-red-700 px-3 py-2 font-semibold text-white hover:bg-red-800"
-        data-action="quitar-bloqueo" data-id="${b.id}" type="button">
+  if (!bloqueos.length) {
+    bloqueosList.innerHTML = `<div class="empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>
+      </svg>
+      <p><strong style="color: var(--c-ink-900)">No hay bloqueos activos.</strong><br />
+      Cuando bloquees un horario o un día, va a aparecer acá.</p>
+    </div>`;
+    return;
+  }
+  bloqueosList.innerHTML = bloqueos.map((b) => {
+    const detalle = `${getCanchaEtiqueta(b.cancha)}, ${formatFecha(b.fecha)}, ${describeBloqueoHorario(b).toLowerCase()}`;
+    return `
+    <article class="bloqueo-card">
+      <div style="display: flex; align-items: start; justify-content: space-between; gap: var(--s-3)">
+        <p class="bloqueo-cancha">${escapeHtml(getCanchaEtiqueta(b.cancha))}</p>
+        <span class="badge badge--pendiente">Bloqueado</span>
+      </div>
+      <p style="margin-top: var(--s-2)">${escapeHtml(formatFecha(b.fecha))}</p>
+      <p>${escapeHtml(describeBloqueoHorario(b))}</p>
+      <p class="bloqueo-motivo">Motivo: ${escapeHtml(b.motivo)}</p>
+      <button class="btn btn--danger btn--sm" style="margin-top: var(--s-3)"
+        data-action="quitar-bloqueo" data-id="${b.id}" data-detalle="${escapeHtml(detalle)}" type="button">
         Quitar bloqueo
       </button>
-    </article>
-  `).join("");
+    </article>`;
+  }).join("");
 }
 
 function describeBloqueoHorario(bloqueo) {
@@ -225,6 +253,43 @@ async function refreshAdminData() {
   ]);
   renderBloqueos(bloqueos);
   renderBloqueosRecurrentes(bloqueosRec);
+  renderResumen(bloqueos);
+}
+
+// ── Resumen ───────────────────────────────────────────────────
+// Los cuatro numeros salen de los datos que ya se cargaron: sin endpoints nuevos.
+function renderResumen(bloqueos = []) {
+  const hoy = todayISO();
+  const manana = isoSumandoDias(1);
+  const vigentes = reservasActuales.filter((r) => !r.pasada);
+
+  const deHoy = vigentes.filter((r) => r.fecha === hoy);
+  const set = (id, valor) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = String(valor);
+  };
+  set("mtHoy", deHoy.length);
+  set("mtManana", vigentes.filter((r) => r.fecha === manana).length);
+  set("mtPendientes", vigentes.filter((r) => r.estado !== "confirmada").length);
+  set("mtBloqueos", bloqueos.filter((b) => b.fecha >= hoy).length);
+
+  const lista = document.getElementById("turnosDeHoy");
+  if (!lista) return;
+  if (!deHoy.length) {
+    lista.innerHTML = `<p class="help">No hay turnos para hoy.</p>`;
+    return;
+  }
+  lista.innerHTML = deHoy
+    .sort((a, b) => a.horario.localeCompare(b.horario))
+    .slice(0, 5)
+    .map((r) => `<div class="turno-dato">
+      <strong style="color: var(--c-ink-900)">${escapeHtml(r.horario)}</strong>
+      ${escapeHtml(getCanchaEtiqueta(r.cancha))} · ${escapeHtml(r.nombre)}
+      <span class="badge ${r.estado === "confirmada" ? "badge--ok" : "badge--pendiente"}">
+        ${r.estado === "confirmada" ? "Pagado" : "Sin pagar"}
+      </span>
+    </div>`)
+    .join("");
 }
 
 btnFiltrarReservas.addEventListener("click", () => loadReservasAdmin(filtroFecha.value));
@@ -237,6 +302,72 @@ btnLimpiarFiltro.addEventListener("click", () => {
 function setAuthenticatedUI(isAuth) {
   loginCard.classList.toggle("hidden", isAuth);
   adminPanel.classList.toggle("hidden", !isAuth);
+  const acciones = document.getElementById("topbarAcciones");
+  if (acciones) acciones.hidden = !isAuth;
+}
+
+// ── Navegacion entre secciones ────────────────────────────────
+// Sin router: las secciones son la misma pagina y se muestran con hidden.
+function mostrarSeccion(nombre) {
+  document.querySelectorAll(".panel-seccion").forEach((seccion) => {
+    seccion.classList.toggle("hidden", seccion.dataset.panel !== nombre);
+  });
+  document.querySelectorAll(".panel-nav-item").forEach((item) => {
+    item.classList.toggle("is-activa", item.dataset.seccion === nombre);
+  });
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+document.querySelectorAll(".panel-nav-item").forEach((item) => {
+  item.addEventListener("click", () => mostrarSeccion(item.dataset.seccion));
+});
+document.querySelectorAll("[data-ir-a]").forEach((boton) => {
+  boton.addEventListener("click", () => mostrarSeccion(boton.dataset.irA));
+});
+
+// ── Modal de confirmacion (reemplaza window.confirm) ──────────
+const modalConfirmar = document.getElementById("modalConfirmar");
+const confirmarTitulo = document.getElementById("confirmarTitulo");
+const confirmarCuerpo = document.getElementById("confirmarCuerpo");
+const btnConfirmarSi = document.getElementById("btnConfirmarSi");
+const btnConfirmarNo = document.getElementById("btnConfirmarNo");
+let accionConfirmada = null;
+
+function pedirConfirmacion({ titulo, cuerpo, textoAccion, onAceptar }) {
+  confirmarTitulo.textContent = titulo;
+  confirmarCuerpo.innerHTML = cuerpo;
+  btnConfirmarSi.textContent = textoAccion;
+  accionConfirmada = onAceptar;
+  modalConfirmar.classList.remove("hidden");
+  btnConfirmarSi.focus();
+}
+
+function cerrarConfirmacion() {
+  modalConfirmar.classList.add("hidden");
+  accionConfirmada = null;
+}
+
+btnConfirmarNo.addEventListener("click", cerrarConfirmacion);
+modalConfirmar.addEventListener("click", (e) => { if (e.target === modalConfirmar) cerrarConfirmacion(); });
+btnConfirmarSi.addEventListener("click", () => {
+  const accion = accionConfirmada;
+  cerrarConfirmacion();
+  if (accion) accion();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !modalConfirmar.classList.contains("hidden")) cerrarConfirmacion();
+});
+
+// Mostrar / ocultar la clave en el login
+const btnVerClave = document.getElementById("btnVerClave");
+if (btnVerClave) {
+  btnVerClave.addEventListener("click", () => {
+    const visible = adminPassword.type === "text";
+    adminPassword.type = visible ? "password" : "text";
+    btnVerClave.textContent = visible ? "Mostrar" : "Ocultar";
+    btnVerClave.setAttribute("aria-pressed", String(!visible));
+    adminPassword.focus();
+  });
 }
 
 btnLogin.addEventListener("click", async () => {
@@ -288,12 +419,18 @@ bloqueosList.addEventListener("click", async (event) => {
   if (!(target instanceof HTMLElement) || target.dataset.action !== "quitar-bloqueo") return;
   const id = target.dataset.id;
   if (!id) return;
-  if (!window.confirm("¿Estas seguro de que queres quitar este bloqueo?")) return;
-  try {
-    await api(`/api/${CLUB_SLUG}/admin/bloqueos/${id}`, { method: "DELETE" });
-    setMessage(adminMessage, "Bloqueo eliminado.", false);
-    await refreshAdminData();
-  } catch (error) { setMessage(adminMessage, error.message || "No se pudo eliminar el bloqueo."); }
+  pedirConfirmacion({
+    titulo: "¿Quitar este bloqueo?",
+    cuerpo: `${escapeHtml(target.dataset.detalle || "")}<br />El horario vuelve a quedar disponible para reservar.`,
+    textoAccion: "Quitar bloqueo",
+    onAceptar: async () => {
+      try {
+        await api(`/api/${CLUB_SLUG}/admin/bloqueos/${id}`, { method: "DELETE" });
+        setMessage(adminMessage, "Bloqueo quitado. El horario volvió a estar disponible.", false);
+        await refreshAdminData();
+      } catch (error) { setMessage(adminMessage, error.message || "No se pudo eliminar el bloqueo."); }
+    },
+  });
 });
 
 reservasList.addEventListener("click", async (event) => {
@@ -316,7 +453,17 @@ reservasList.addEventListener("click", async (event) => {
   }
 
   if (action === "cancelar") {
-    if (!window.confirm("¿Estas seguro de que queres cancelar este turno? Esta accion lo libera.")) return;
+    pedirConfirmacion({
+      titulo: "¿Cancelar este turno?",
+      cuerpo: `${escapeHtml(target.dataset.detalle || "")}<br />El horario queda libre y el turno se elimina. No se puede deshacer.`,
+      textoAccion: "Cancelar turno",
+      onAceptar: () => cancelarTurno(id),
+    });
+    return;
+  }
+});
+
+async function cancelarTurno(id) {
     try {
       const data = await api(`/api/${CLUB_SLUG}/admin/reservas/${id}`, { method: "DELETE" });
       setMessage(adminMessage, "Turno cancelado y liberado.", false);
@@ -330,8 +477,7 @@ reservasList.addEventListener("click", async (event) => {
       window.open(`https://wa.me/${telefono}?text=${mensajeWa}`, "_blank");
       await refreshAdminData();
     } catch (error) { setMessage(adminMessage, error.message || "No se pudo cancelar el turno."); }
-  }
-});
+}
 
 // ── Configuración del club ────────────────────────────────────
 
@@ -479,15 +625,23 @@ canchasList.addEventListener("click", async (event) => {
 
   if (target.dataset.action === "eliminar-cancha") {
     const id = target.dataset.id;
-    if (!window.confirm("¿Eliminar esta cancha? Solo se puede si no tiene reservas futuras.")) return;
-    try {
-      await api(`/api/${CLUB_SLUG}/admin/canchas/${id}`, { method: "DELETE" });
-      setMessage(cfgCanchaMsg, "Cancha eliminada.", false);
-      await loadCanchas();
-      await loadConfig();
-    } catch (error) { setMessage(cfgCanchaMsg, error.message || "No se pudo eliminar."); }
+    pedirConfirmacion({
+      titulo: `¿Eliminar ${escapeHtml(target.dataset.etiqueta || "esta cancha")}?`,
+      cuerpo: "Dejará de aparecer para reservar. Los turnos ya reservados no se borran.",
+      textoAccion: "Eliminar",
+      onAceptar: () => eliminarCancha(id),
+    });
   }
 });
+
+async function eliminarCancha(id) {
+  try {
+    await api(`/api/${CLUB_SLUG}/admin/canchas/${id}`, { method: "DELETE" });
+    setMessage(cfgCanchaMsg, "Cancha eliminada.", false);
+    await loadCanchas();
+    await loadConfig();
+  } catch (error) { setMessage(cfgCanchaMsg, error.message || "No se pudo eliminar."); }
+}
 
 btnCambiarPass.addEventListener("click", async () => {
   try {
@@ -572,14 +726,23 @@ document.getElementById("bloqueosRecurrentesList")?.addEventListener("click", as
   const target = event.target;
   if (!(target instanceof HTMLElement) || target.dataset.action !== "quitar-bloqueo-rec") return;
   const id = target.dataset.id;
-  if (!id || !window.confirm("¿Quitar este bloqueo recurrente?")) return;
+  if (!id) return;
+  pedirConfirmacion({
+    titulo: "¿Quitar este bloqueo recurrente?",
+    cuerpo: `${escapeHtml(target.dataset.detalle || "")}<br />Deja de aplicarse todas las semanas.`,
+    textoAccion: "Quitar bloqueo",
+    onAceptar: () => quitarBloqueoRecurrente(id),
+  });
+});
+
+async function quitarBloqueoRecurrente(id) {
   try {
     await api(`/api/${CLUB_SLUG}/admin/bloqueos-recurrentes/${id}`, { method: "DELETE" });
     setMessage(adminMessage, "Bloqueo recurrente eliminado.", false);
     const bloqueosRec = await api(`/api/${CLUB_SLUG}/admin/bloqueos-recurrentes`);
     renderBloqueosRecurrentes(bloqueosRec);
   } catch (e) { setMessage(adminMessage, e.message || "No se pudo eliminar."); }
-});
+}
 
 // ── Vista calendario ──────────────────────────────────────────
 

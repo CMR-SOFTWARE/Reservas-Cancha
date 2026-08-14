@@ -5,55 +5,129 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CMR Canchas — Admin</title>
     <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="stylesheet" href="/tokens.css" />
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/admin.css" />
     <script src="https://cdn.tailwindcss.com"></script>
   </head>
-  <body class="min-h-screen bg-slate-100 text-slate-800 flex flex-col">
+  <body>
 
-    <nav class="bg-green-950 shadow-md">
-      <div class="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3 md:px-6">
-        <a href="/" class="flex items-center gap-3">
-          <img src="/favicon.png" alt="CMR Canchas" class="h-9 w-9 rounded-lg object-contain" />
-          <span class="text-white font-bold text-base tracking-tight">CMR Canchas</span>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a href="/" class="site-brand">
+          <img src="/favicon.png" alt="" class="site-logo" />
+          <span class="site-texto"><span class="site-club">CMR Canchas</span><span class="site-sufijo"> · Panel</span></span>
         </a>
-        <span class="text-green-400 text-xs font-semibold uppercase tracking-wider">Panel Admin</span>
-      </div>
-    </nav>
-
-    <main class="mx-auto max-w-5xl p-4 md:p-6 flex-1 w-full">
-      <header class="mb-4">
-        <h1 class="text-2xl font-bold md:text-3xl">Panel Administrador</h1>
-        <p class="text-slate-600">Gestion de reservas, bloqueos y cancelaciones.</p>
-      </header>
-
-      <section id="loginCard" class="mb-4 rounded-xl bg-white shadow-sm overflow-hidden">
-        <div class="h-1 bg-green-600"></div>
-        <div class="p-4">
-          <h2 class="mb-3 text-xl font-semibold">Acceso admin</h2>
-          <div class="mb-3 flex flex-col gap-1">
-            <label class="font-medium" for="adminPassword">Clave de administrador</label>
-            <input id="adminPassword" type="password" class="rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
-          </div>
-          <button id="btnLogin" class="rounded-lg bg-green-700 px-4 py-2 font-semibold text-white hover:bg-green-800" type="button">Ingresar</button>
-          <p id="loginMessage" class="mt-2 min-h-5 text-sm font-semibold text-red-700"></p>
+        <div class="topbar-acciones" id="topbarAcciones" hidden>
+          <a id="linkMenu" href="#" class="btn btn--ghost btn--sm topbar-btn" title="Ver el sitio">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/>
+            </svg>
+            <span class="topbar-texto">Ver el sitio</span>
+          </a>
+          <button id="btnLogout" class="btn btn--ghost btn--sm topbar-btn" type="button" title="Cerrar sesión">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>
+            </svg>
+            <span class="topbar-texto">Cerrar sesión</span>
+          </button>
         </div>
-      </section>
+      </div>
+    </header>
 
-      <section id="adminPanel" class="hidden">
-        <section class="mb-4 rounded-xl bg-white shadow-sm overflow-hidden">
-          <div class="h-1 bg-green-700"></div>
-          <div class="p-4">
+    <div id="loginCard" class="login-pantalla">
+      <div class="card login-card">
+        <img src="/favicon.png" alt="" class="login-logo" />
+        <h1 class="login-titulo">Panel de administración</h1>
+        <p class="card-sub" id="loginClub"></p>
+
+        <div class="field" style="margin-top: var(--s-5)">
+          <label class="label" for="adminPassword">Clave de administrador</label>
+          <div class="input-con-accion">
+            <input id="adminPassword" type="password" class="input" autocomplete="current-password" />
+            <button type="button" class="btn btn--ghost btn--sm" id="btnVerClave" aria-pressed="false">Mostrar</button>
+          </div>
+        </div>
+
+        <div id="loginMessage" role="alert"></div>
+
+        <button id="btnLogin" class="btn btn--primary btn--block btn--lg" type="button" style="margin-top: var(--s-5)">
+          Ingresar
+        </button>
+      </div>
+    </div>
+
+    <div id="adminPanel" class="hidden panel-shell">
+      <nav class="panel-nav" aria-label="Secciones del panel">
+        <button type="button" class="panel-nav-item is-activa" data-seccion="resumen">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          Resumen
+        </button>
+        <button type="button" class="panel-nav-item" data-seccion="reservas">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/></svg>
+          Reservas
+        </button>
+        <button type="button" class="panel-nav-item" data-seccion="bloqueos">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+          Bloqueos
+        </button>
+        <button type="button" class="panel-nav-item" data-seccion="cancelaciones">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+          Cancelaciones
+        </button>
+        <button type="button" class="panel-nav-item" data-seccion="configuracion">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5l1.4 2.6 2.9-.5.5 2.9 2.6 1.4-1.5 2.5 1.5 2.5-2.6 1.4-.5 2.9-2.9-.5L12 21.5l-1.4-2.6-2.9.5-.5-2.9-2.6-1.4L6.1 12 4.6 9.5l2.6-1.4.5-2.9 2.9.5z"/></svg>
+          Configuración
+        </button>
+      </nav>
+
+      <main class="panel-contenido">
+        <section class="panel-seccion" data-panel="resumen">
+          <h1 class="page-title">Resumen</h1>
+          <p class="page-sub">Cómo viene el movimiento del club.</p>
+
+          <div class="metricas" id="metricas">
+            <div class="metrica"><span class="metrica-label">Turnos de hoy</span><span class="metrica-valor" id="mtHoy">—</span></div>
+            <div class="metrica"><span class="metrica-label">Turnos de mañana</span><span class="metrica-valor" id="mtManana">—</span></div>
+            <div class="metrica"><span class="metrica-label">Pendientes de pago</span><span class="metrica-valor" id="mtPendientes">—</span></div>
+            <div class="metrica"><span class="metrica-label">Bloqueos activos</span><span class="metrica-valor" id="mtBloqueos">—</span></div>
+          </div>
+
+          <section class="card" style="margin-top: var(--s-5)">
+            <h2 class="card-title">Turnos de hoy</h2>
+            <div class="card-body" id="turnosDeHoy"></div>
+            <button type="button" class="btn btn--secondary btn--sm" data-ir-a="reservas" style="margin-top: var(--s-4)">
+              Ver todas las reservas
+            </button>
+          </section>
+        </section>
+
+        <section class="panel-seccion hidden" data-panel="cancelaciones">
+          <h1 class="page-title">Cancelaciones</h1>
+          <p class="page-sub">Pedidos de cancelación de los turnos.</p>
+          <section class="card" style="margin-top: var(--s-5)">
+            <div class="empty">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-5a8.4 8.4 0 0 1-.9-3.9 8.5 8.5 0 0 1 8.4-9h.5a8.5 8.5 0 0 1 8 8z"/>
+              </svg>
+              <p>
+                <strong style="color: var(--c-ink-900)">Las cancelaciones llegan por WhatsApp.</strong><br />
+                Cuando alguien pide cancelar un turno, te escribe al WhatsApp del club.
+                Podés cancelarlo desde Reservas.
+              </p>
+              <button type="button" class="btn btn--secondary btn--sm" data-ir-a="reservas">Ir a Reservas</button>
+            </div>
+          </section>
+        </section>
+
+        <section class="panel-seccion hidden" data-panel="bloqueos">
+        <h1 class="page-title">Bloqueos</h1>
+        <p class="page-sub">Cerrá horarios para que no se puedan reservar.</p>
+
+        <section class="card" style="margin-top: var(--s-5)">
+          <div>
             <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <h2 class="text-xl font-semibold">Bloquear cancha</h2>
-              <div class="flex flex-wrap items-center gap-2">
-                <a
-                  id="linkMenu"
-                  href="#"
-                  class="rounded-lg bg-green-800 px-4 py-2 font-semibold text-green-100 hover:bg-green-900"
-                >
-                  Volver al menu principal
-                </a>
-                <button id="btnLogout" class="rounded-lg border border-green-800 px-4 py-2 font-semibold text-green-900 hover:bg-green-50" type="button">Cerrar sesion</button>
-              </div>
+              <h2 class="card-title">Bloquear cancha</h2>
             </div>
             <div class="mb-3 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
               <div class="flex flex-col gap-1">
@@ -88,7 +162,7 @@
 
         <section class="mb-4 rounded-xl bg-white p-4 shadow-sm">
           <h2 class="mb-3 text-xl font-semibold text-green-900">Bloqueos activos</h2>
-          <div id="bloqueosList" class="grid gap-3"></div>
+          <div id="bloqueosList" class="grilla-cards"></div>
         </section>
 
         <section class="mb-4 rounded-xl bg-white p-4 shadow-sm">
@@ -154,11 +228,16 @@
 
           <div id="bloqueosRecurrentesList" class="mt-4 grid gap-3"></div>
         </section>
+        </section>
 
-        <section class="mb-4 rounded-xl bg-white p-4 shadow-sm">
+        <section class="panel-seccion hidden" data-panel="reservas">
+        <h1 class="page-title">Reservas</h1>
+        <p class="page-sub">Todos los turnos del club.</p>
+
+        <section class="card" style="margin-top: var(--s-5)">
           <!-- Encabezado: título + tabs + exportar -->
           <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <h2 class="text-xl font-semibold text-green-900">Turnos reservados</h2>
+            <h2 class="card-title">Turnos reservados</h2>
             <div class="flex flex-wrap items-center gap-2">
               <div class="flex overflow-hidden rounded-lg border border-slate-200 text-sm font-semibold">
                 <button id="btnVistaLista" type="button"
@@ -201,14 +280,21 @@
             <div id="calGrid" class="overflow-x-auto rounded-lg border border-slate-200"></div>
           </div>
         </section>
+        </section>
 
-        <section class="mb-4 rounded-xl bg-white shadow-sm overflow-hidden">
-          <button id="btnToggleConfig" class="flex w-full items-center justify-between text-left p-4" type="button">
-            <h2 class="text-xl font-semibold text-green-900">Configuracion del club</h2>
-            <span id="configChevron" class="text-green-700 transition-transform">&#9660;</span>
+        <section class="panel-seccion hidden" data-panel="configuracion">
+        <h1 class="page-title">Configuración</h1>
+        <p class="page-sub">Datos del club, canchas y clave de acceso.</p>
+
+        <section class="card" style="margin-top: var(--s-5)">
+          <!-- El acordeon se elimina: dentro de su seccion va todo visible.
+               btnToggleConfig y configChevron quedan ocultos porque admin.js
+               todavia los referencia. -->
+          <button id="btnToggleConfig" class="hidden" type="button" aria-hidden="true" tabindex="-1">
+            <span id="configChevron"></span>
           </button>
 
-          <div id="configPanel" class="hidden border-t border-slate-100 p-4 space-y-6">
+          <div id="configPanel" class="space-y-6">
 
             <!-- Info general -->
             <div>
@@ -289,10 +375,22 @@
 
           </div>
         </section>
-      </section>
-    </main>
+        </section>
+      </main>
+    </div>
 
-    <script src="/admin.js"></script>
+    <div id="modalConfirmar" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="confirmarTitulo">
+      <div class="modal-panel modal-panel--sm">
+        <h2 class="modal-title" id="confirmarTitulo"></h2>
+        <div id="confirmarCuerpo" style="margin-top: var(--s-3); color: var(--c-ink-700)"></div>
+        <div style="display: flex; flex-wrap: wrap; gap: var(--s-3); margin-top: var(--s-6)">
+          <button id="btnConfirmarNo" type="button" class="btn btn--secondary">Volver</button>
+          <button id="btnConfirmarSi" type="button" class="btn btn--danger" style="flex: 1 1 160px"></button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/admin.js" defer></script>
 
     <!-- Footer -->
     <footer class="bg-green-950 text-green-200 mt-10">
