@@ -1,0 +1,109 @@
+:root {
+  /* ── Marca / verde deportivo ───────────────────────────── */
+  --c-brand-900: #0B3D22;  /* header, footer, títulos sobre claro */
+  --c-brand-800: #0F5730;  /* hover de botón primario */
+  --c-brand-700: #15703F;  /* PRIMARIO (botones, foco, links) */
+  --c-brand-600: #1C8A4E;  /* acentos, íconos sobre claro */
+  --c-brand-100: #D6EDDF;  /* borde de superficie verde */
+  --c-brand-50:  #E8F5EE;  /* fondo de estado disponible / éxito */
+
+  /* ── Texto (azul oscuro, no negro) ─────────────────────── */
+  --c-ink-900: #0E2233;    /* títulos */
+  --c-ink-700: #2B3F4F;    /* cuerpo */
+  --c-ink-500: #566A79;    /* secundario */
+  --c-ink-400: #7B8B98;    /* placeholder, ayuda */
+
+  /* ── Superficies y bordes ──────────────────────────────── */
+  --c-bg:       #F4F6F8;   /* fondo de página */
+  --c-surface:  #FFFFFF;   /* cards, modal */
+  --c-surface-2:#F8FAFB;   /* filas alternas, bloques informativos */
+  --c-border:   #DDE4EA;   /* borde por defecto */
+  --c-border-strong: #C2CDD6; /* borde de input */
+
+  /* ── Estados de horario ────────────────────────────────── */
+  --c-free-bg:     #E8F5EE;
+  --c-free-border: #A9D9BE;
+  --c-free-text:   #0F5730;
+  --c-free-dot:    #15703F;
+
+  --c-busy-bg:     #EEF1F4;
+  --c-busy-border: #DDE4EA;
+  --c-busy-text:   #5B6875;
+  --c-busy-dot:    #8996A3;
+
+  --c-block-bg:     #FFF4E0;
+  --c-block-border: #F0D3A0;
+  --c-block-text:   #8A5200;
+  --c-block-dot:    #C77A00;
+
+  /* ── Feedback ──────────────────────────────────────────── */
+  --c-danger:     #B42318;
+  --c-danger-bg:  #FEF3F2;
+  --c-danger-border: #FBCFCB;
+  --c-success:    #15703F;
+  --c-success-bg: #E8F5EE;
+  --c-warning:    #8A5200;
+  --c-warning-bg: #FFF4E0;
+  --c-info:       #175CD3;
+  --c-info-bg:    #EFF6FF;
+
+  /* ── Tipografía ────────────────────────────────────────── */
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  --fs-xs:   0.8125rem; /* 13px — sólo metadatos, nunca texto de acción */
+  --fs-sm:   0.875rem;  /* 14px */
+  --fs-base: 1rem;      /* 16px — mínimo para cuerpo y controles */
+  --fs-md:   1.125rem;  /* 18px — labels de sección, slots de horario */
+  --fs-lg:   1.25rem;   /* 20px — títulos de card */
+  --fs-xl:   1.5rem;    /* 24px */
+  --fs-2xl:  1.875rem;  /* 30px — h1 mobile */
+  --fs-3xl:  2.25rem;   /* 36px — h1 desktop */
+
+  --lh-tight: 1.2;
+  --lh-snug:  1.35;
+  --lh-body:  1.55;
+
+  --fw-regular: 400;
+  --fw-medium:  500;
+  --fw-semi:    600;
+  --fw-bold:    700;
+
+  /* ── Espaciado (base 4) ────────────────────────────────── */
+  --s-1: 4px;   --s-2: 8px;   --s-3: 12px;  --s-4: 16px;
+  --s-5: 20px;  --s-6: 24px;  --s-8: 32px;  --s-10: 40px;
+  --s-12: 48px; --s-16: 64px;
+
+  /* ── Radios ────────────────────────────────────────────── */
+  --r-sm: 8px;    /* badge, chip */
+  --r-md: 12px;   /* input, botón, slot */
+  --r-lg: 16px;   /* card, modal */
+  --r-pill: 999px;
+
+  /* ── Sombras (muy sutiles) ─────────────────────────────── */
+  --sh-xs: 0 1px 2px rgba(14, 34, 51, 0.06);
+  --sh-sm: 0 2px 8px rgba(14, 34, 51, 0.07);
+  --sh-md: 0 8px 24px rgba(14, 34, 51, 0.10);
+  --sh-focus: 0 0 0 3px rgba(21, 112, 63, 0.30);
+
+  /* ── Alturas de control (target táctil) ────────────────── */
+  --h-control: 48px;      /* inputs, selects, botones */
+  --h-control-lg: 56px;   /* CTA principal en mobile */
+  --h-control-sm: 40px;   /* acciones secundarias en desktop */
+
+  /* ── Layout ────────────────────────────────────────────── */
+  --w-page: 1040px;
+  --pad-page: var(--s-4);          /* mobile */
+  --pad-page-md: var(--s-6);       /* ≥768px */
+
+  /* ── Movimiento ────────────────────────────────────────── */
+  --t-fast: 150ms ease-out;
+  --t-base: 200ms ease-out;
+  --t-slow: 250ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
