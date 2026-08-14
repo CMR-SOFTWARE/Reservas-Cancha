@@ -32,6 +32,11 @@ const cbuTransferencia = document.getElementById("cbuTransferencia");
 const titularTransferencia = document.getElementById("titularTransferencia");
 const btnSolicitarCancelacion = document.getElementById("btnSolicitarCancelacion");
 const telefonoInput = document.getElementById("telefono");
+const contadorDisponibles = document.getElementById("contadorDisponibles");
+const cardResumen = document.getElementById("cardResumen");
+const resumenDetalle = document.getElementById("resumenDetalle");
+const btnConfirmarReserva = document.getElementById("btnConfirmarReserva");
+const btnCambiarHorario = document.getElementById("btnCambiarHorario");
 
 let config = null;
 let reservasActuales = [];
@@ -157,33 +162,139 @@ function findBloqueo(horario) {
   });
 }
 
+// "13:00" -> "13:00 – 14:00". El usuario no tiene que deducir cuanto dura.
+function rangoHorario(horario) {
+  const hora = Number(String(horario).split(":")[0]);
+  if (!Number.isFinite(hora)) return horario;
+  return `${horario} – ${String((hora + 1) % 24).padStart(2, "0")}:00`;
+}
+
+const FLECHA_SVG = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>`;
+const CHECK_SVG = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>`;
+
+function renderSkeletonHorarios() {
+  horariosContainer.innerHTML = Array.from(
+    { length: 3 },
+    () => `<div class="skeleton" aria-hidden="true"></div>`
+  ).join("");
+  if (contadorDisponibles) contadorDisponibles.textContent = "";
+}
+
 function renderHorarios() {
   horariosContainer.innerHTML = "";
+  let disponibles = 0;
+
   config.horarios.forEach((horario) => {
     const ocupado = isOcupado(horario);
     const bloqueo = findBloqueo(horario);
     const pasado = isHorarioPasado(fechaInput.value, horario);
     const bloqueado = Boolean(bloqueo);
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.textContent = horario;
+
+    let clase = "slot--libre";
+    let estado = "Disponible";
+    let libre = false;
+
     if (pasado) {
-      btn.className = "rounded-lg px-3 py-3 font-bold bg-slate-200 text-slate-500 cursor-not-allowed";
-      btn.title = "Horario ya pasado";
-      btn.disabled = true;
+      clase = "slot--ocupado";
+      estado = "Ya pasó";
     } else if (bloqueado) {
-      btn.className = "rounded-lg px-3 py-3 font-bold bg-amber-100 text-amber-800 cursor-not-allowed";
-      btn.title = bloqueo.motivo || "Bloqueado por administracion";
-      btn.disabled = true;
+      clase = "slot--bloqueado";
+      // El motivo va en la fila: en mobile no existe el hover del title.
+      estado = `Bloqueado · ${bloqueo.motivo || "Por administración"}`;
     } else if (ocupado) {
-      btn.className = "rounded-lg px-3 py-3 font-bold bg-slate-200 text-slate-500 cursor-not-allowed";
-      btn.disabled = true;
+      clase = "slot--ocupado";
+      estado = "Ocupado";
     } else {
-      btn.className = "rounded-lg px-3 py-3 font-bold bg-emerald-100 text-emerald-900 hover:bg-emerald-200";
-      btn.disabled = false;
-      btn.addEventListener("click", () => openModal(horario));
+      libre = true;
+      disponibles += 1;
     }
-    horariosContainer.appendChild(btn);
+
+    const contenido = `
+      <span class="slot-dot" aria-hidden="true"></span>
+      <span class="slot-hora">${escapeHtml(rangoHorario(horario))}</span>
+      <span class="slot-estado">${escapeHtml(estado)}${libre ? FLECHA_SVG : ""}</span>`;
+
+    if (libre) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `slot ${clase}`;
+      btn.dataset.horario = horario;
+      btn.setAttribute("aria-pressed", "false");
+      btn.setAttribute("aria-label", `Reservar ${rangoHorario(horario)}`);
+      btn.innerHTML = contenido;
+      btn.addEventListener("click", () => seleccionarHorario(horario));
+      horariosContainer.appendChild(btn);
+      return;
+    }
+
+    const div = document.createElement("div");
+    div.className = `slot ${clase}`;
+    div.setAttribute("aria-disabled", "true");
+    div.innerHTML = contenido;
+    horariosContainer.appendChild(div);
+  });
+
+  if (contadorDisponibles) {
+    contadorDisponibles.textContent = disponibles === 1
+      ? "1 horario disponible"
+      : `${disponibles} horarios disponibles`;
+  }
+
+  if (!config.horarios.length || disponibles === 0) {
+    horariosContainer.insertAdjacentHTML("beforeend", `
+      <div class="empty" style="grid-column: 1 / -1">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
+        </svg>
+        <p>No quedan horarios libres para este día. Probá con otra fecha u otra cancha.</p>
+      </div>`);
+  }
+
+  // La seleccion no sobrevive a un cambio de cancha o fecha.
+  limpiarSeleccion();
+}
+
+// Al elegir un horario ya no se abre el modal de una: primero se muestra el
+// resumen para que el usuario vea que esta por reservar.
+function seleccionarHorario(horario) {
+  const canchaSeleccionada = canchaSelect.options[canchaSelect.selectedIndex];
+  seleccion = {
+    cancha: canchaSelect.value,
+    canchaEtiqueta: canchaSeleccionada ? canchaSeleccionada.text : canchaSelect.value,
+    fecha: fechaInput.value,
+    horario,
+  };
+
+  horariosContainer.querySelectorAll(".slot[aria-pressed]").forEach((slot) => {
+    const elegido = slot.dataset.horario === horario;
+    slot.setAttribute("aria-pressed", String(elegido));
+    const estado = slot.querySelector(".slot-estado");
+    if (estado) estado.innerHTML = elegido ? `Elegido${CHECK_SVG}` : `Disponible${FLECHA_SVG}`;
+  });
+
+  if (!cardResumen) return;
+  const senia = config?.precio && Number(config.precio) > 0
+    ? `<p>Seña: <strong>$${escapeHtml(config.precio)}</strong> por transferencia</p>`
+    : "";
+  resumenDetalle.innerHTML = `
+    <p><strong>${escapeHtml(seleccion.canchaEtiqueta)}</strong></p>
+    <p>${escapeHtml(fechaEnPalabras(seleccion.fecha))} · ${escapeHtml(rangoHorario(horario))}</p>
+    ${senia}`;
+  cardResumen.hidden = false;
+
+  const caja = cardResumen.getBoundingClientRect();
+  if (caja.bottom > window.innerHeight) {
+    cardResumen.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+}
+
+function limpiarSeleccion() {
+  seleccion = null;
+  if (cardResumen) cardResumen.hidden = true;
+  horariosContainer.querySelectorAll('.slot[aria-pressed="true"]').forEach((slot) => {
+    slot.setAttribute("aria-pressed", "false");
+    const estado = slot.querySelector(".slot-estado");
+    if (estado) estado.innerHTML = `Disponible${FLECHA_SVG}`;
   });
 }
 
@@ -221,8 +332,12 @@ function validarPaso1() {
   return true;
 }
 
+function etiquetaCancha(nombre) {
+  return config?.canchas?.find((c) => c.nombre === nombre)?.etiqueta || `Cancha ${nombre}`;
+}
+
 function buildWhatsAppUrl(reserva) {
-  const canchaLabel = seleccion ? seleccion.canchaEtiqueta : `Cancha ${reserva.cancha}`;
+  const canchaLabel = seleccion ? seleccion.canchaEtiqueta : etiquetaCancha(reserva.cancha);
   const comprobanteTexto = reserva.comprobanteUrl
     ? `Comprobante: ${reserva.comprobanteUrl}`
     : "Comprobante: cargado en la web";
@@ -241,6 +356,7 @@ function buildWhatsAppUrl(reserva) {
 
 async function refreshHorarios() {
   if (!fechaInput.value) fechaInput.value = todayISO();
+  renderSkeletonHorarios();
   const prevCancha = canchaSelect.value;
   await loadConfig();
   if ([...canchaSelect.options].some((o) => o.value === prevCancha)) {
@@ -311,6 +427,20 @@ if (btnSolicitarCancelacion) {
     const confirmar = window.confirm("¿Estas seguro de que queres solicitar la cancelacion del turno?");
     if (!confirmar) return;
     window.location.href = buildCancelacionWhatsAppUrl();
+  });
+}
+
+if (btnConfirmarReserva) {
+  btnConfirmarReserva.addEventListener("click", () => {
+    if (!seleccion) return;
+    openModal(seleccion.horario);
+  });
+}
+
+if (btnCambiarHorario) {
+  btnCambiarHorario.addEventListener("click", () => {
+    limpiarSeleccion();
+    horariosContainer.scrollIntoView({ behavior: "smooth", block: "nearest" });
   });
 }
 

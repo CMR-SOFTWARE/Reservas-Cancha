@@ -285,8 +285,21 @@ a:hover { color: var(--c-brand-800); text-decoration: underline; }
   border-radius: var(--r-md);
   transition: background-color var(--t-fast), border-color var(--t-fast);
 }
-.slot-hora { font-size: var(--fs-md); font-weight: var(--fw-bold); line-height: 1; }
-.slot-estado { font-size: var(--fs-sm); font-weight: var(--fw-semi); }
+.slot-hora {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-bold);
+  line-height: 1;
+  white-space: nowrap;
+}
+/* inline-flex: el reset pone svg en display:block y la flecha caia debajo. */
+.slot-estado {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semi);
+  text-align: right;
+}
 .slot-dot { width: 12px; height: 12px; border-radius: var(--r-pill); }
 
 .slot--libre {
