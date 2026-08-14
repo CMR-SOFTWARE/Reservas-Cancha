@@ -110,23 +110,41 @@
       </div>
     </main>
 
-    <div id="modal" class="hidden fixed inset-0 z-10 flex items-center justify-center bg-black/55 p-4" role="dialog" aria-modal="true">
-      <div class="relative w-full max-w-xl rounded-xl bg-white p-4 shadow-md">
-        <button id="btnCerrarModal" class="absolute right-3 top-3 text-lg font-bold text-slate-600" type="button" aria-label="Cerrar">
-          x
-        </button>
-        <h3 class="text-xl font-semibold">Completa tu reserva</h3>
-        <p id="reservaSeleccion" class="mt-1 font-semibold text-emerald-700"></p>
+    <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitulo">
+      <div class="modal-panel">
+        <div class="modal-head">
+          <h2 class="modal-title" id="modalTitulo">Completá tu reserva</h2>
+          <button id="btnCerrarModal" class="modal-close" type="button" aria-label="Cerrar">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+        <p id="reservaSeleccion" style="margin-top: var(--s-1); font-weight: var(--fw-semi); color: var(--c-brand-700)"></p>
 
-        <form id="formReserva" enctype="multipart/form-data">
+        <div style="margin-top: var(--s-5)">
+          <div class="steps" id="stepsIndicador" aria-hidden="true">
+            <span class="step-dot step-dot--actual" data-paso="1">1</span>
+            <span class="step-line" data-linea="1"></span>
+            <span class="step-dot" data-paso="2">2</span>
+            <span class="step-line" data-linea="2"></span>
+            <span class="step-dot" data-paso="3">3</span>
+          </div>
+          <p class="steps-label" id="stepsLabel" aria-live="polite">Paso 1 de 3 · Tus datos</p>
+        </div>
+
+        <!-- novalidate: el input de archivo esta oculto (la zona de carga es el
+             label), asi que la burbuja nativa no se puede mostrar. Validamos
+             nosotros y mostramos el error debajo del campo. -->
+        <form id="formReserva" enctype="multipart/form-data" novalidate style="margin-top: var(--s-5)">
           <div id="paso1" class="step">
-            <h4 class="mb-2 mt-3 font-semibold">Paso 1 - Datos personales</h4>
-            <div class="mb-2 flex flex-col gap-1">
-              <label class="font-medium" for="nombre">Nombre y apellido</label>
-              <input id="nombre" name="nombre" type="text" required class="rounded-lg border border-slate-300 px-3 py-2" />
+            <div class="field">
+              <label class="label" for="nombre">Nombre y apellido</label>
+              <input id="nombre" name="nombre" type="text" class="input" required aria-describedby="errorNombre" />
+              <p class="error-text" id="errorNombre" hidden></p>
             </div>
-            <div class="mb-3 flex flex-col gap-1">
-              <label class="font-medium" for="telefono">Telefono</label>
+            <div class="field">
+              <label class="label" for="telefono">Teléfono</label>
               <input
                 id="telefono"
                 name="telefono"
@@ -134,60 +152,97 @@
                 inputmode="numeric"
                 pattern="[0-9]+"
                 maxlength="15"
+                class="input"
                 required
-                class="rounded-lg border border-slate-300 px-3 py-2"
+                aria-describedby="errorTelefono"
               />
+              <p class="error-text" id="errorTelefono" hidden></p>
             </div>
-            <button id="btnPaso2" class="rounded-lg bg-emerald-700 px-4 py-2 font-semibold text-white hover:bg-emerald-800" type="button">Continuar</button>
+            <button id="btnPaso2" class="btn btn--primary btn--block btn--lg" type="button" style="margin-top: var(--s-6)">
+              Continuar
+            </button>
           </div>
 
           <div id="paso2" class="step hidden">
-            <h4 class="mb-2 mt-3 font-semibold">Paso 2 - Transferencia y comprobante</h4>
-            <p class="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium leading-snug text-amber-950">
-              Para reservar, la seña es de <strong>$12.000</strong>. Si no se transfiere ese monto, el turno se cancela automáticamente.
-            </p>
-            <div class="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <p><strong>Alias:</strong> <span id="aliasTransferencia"></span></p>
-              <p><strong>CBU:</strong> <span id="cbuTransferencia"></span></p>
-              <p><strong>Titular:</strong> <span id="titularTransferencia"></span></p>
+            <div class="alert alert--warning" id="aviasSenia">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                <path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>
+              </svg>
+              <span id="textoSenia"></span>
             </div>
-            <div class="mb-3 flex flex-col gap-1">
-              <label class="font-medium" for="comprobante">Comprobante (JPG, PNG, WEBP o PDF)</label>
-              <input id="comprobante" name="comprobante" type="file" accept=".jpg,.jpeg,.png,.webp,.pdf" required class="rounded-lg border border-slate-300 px-3 py-2" />
+
+            <div style="margin-top: var(--s-4); background: var(--c-surface-2); border: 1px solid var(--c-border); border-radius: var(--r-md)">
+              <div class="dato-copiable">
+                <span><span class="label">Alias</span><br /><span id="aliasTransferencia"></span></span>
+                <button type="button" class="btn btn--ghost btn--sm" data-copiar="aliasTransferencia">Copiar</button>
+              </div>
+              <div class="dato-copiable">
+                <span><span class="label">CBU</span><br /><span id="cbuTransferencia"></span></span>
+                <button type="button" class="btn btn--ghost btn--sm" data-copiar="cbuTransferencia">Copiar</button>
+              </div>
+              <div class="dato-copiable">
+                <span><span class="label">Titular</span><br /><span id="titularTransferencia"></span></span>
+                <button type="button" class="btn btn--ghost btn--sm" data-copiar="titularTransferencia">Copiar</button>
+              </div>
             </div>
-            <div class="flex flex-wrap gap-2">
-              <button id="btnVolverPaso1" class="rounded-lg bg-slate-600 px-4 py-2 font-semibold text-white hover:bg-slate-700" type="button">
-                Volver
+
+            <div class="field" style="margin-top: var(--s-5)">
+              <label class="label" for="comprobante">Comprobante de la transferencia</label>
+              <label class="file-drop" for="comprobante" id="zonaComprobante">
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+                </svg>
+                <span>
+                  <span id="nombreArchivo">Elegí una foto o PDF del comprobante</span><br />
+                  <span class="help">Máximo 5 MB</span>
+                </span>
+              </label>
+              <input id="comprobante" name="comprobante" type="file" accept=".jpg,.jpeg,.png,.webp,.pdf" required class="sr-only" aria-describedby="errorComprobante" />
+              <p class="error-text" id="errorComprobante" hidden></p>
+            </div>
+
+            <div id="alertReserva" style="margin-top: var(--s-4)"></div>
+
+            <div style="display: flex; flex-wrap: wrap; gap: var(--s-3); margin-top: var(--s-5)">
+              <button id="btnVolverPaso1" class="btn btn--secondary" type="button">Volver</button>
+              <button id="btnReservar" class="btn btn--primary btn--lg" type="submit" style="flex: 1 1 200px; min-width: 160px">
+                Reservar
               </button>
-              <button id="btnReservar" class="rounded-lg bg-emerald-700 px-4 py-2 font-semibold text-white hover:bg-emerald-800" type="submit">Reservar</button>
             </div>
           </div>
 
           <div id="paso3" class="step hidden">
-            <div class="flex flex-col items-center gap-3 py-4 text-center">
-              <div class="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
-                <svg class="h-9 w-9 text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <div style="display: flex; flex-direction: column; align-items: center; gap: var(--s-4); text-align: center; padding-block: var(--s-4)">
+              <div style="display: flex; width: 64px; height: 64px; align-items: center; justify-content: center; background: var(--c-brand-50); border-radius: 50%">
+                <svg width="36" height="36" style="color: var(--c-brand-700)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <polyline points="20 6 9 17 4 12"></polyline>
                 </svg>
               </div>
-              <h4 class="text-lg font-bold text-emerald-800">Turno reservado</h4>
-              <div id="confirmacionDetalle" class="w-full space-y-1 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm text-slate-700"></div>
-              <p class="text-sm text-slate-500">Enviá el comprobante por WhatsApp para confirmar tu pago.</p>
-              <div class="flex w-full flex-col gap-2">
-                <a id="btnWhatsAppConfirm" href="#" target="_blank" rel="noopener noreferrer"
-                  class="rounded-lg bg-emerald-700 px-4 py-2.5 text-center font-semibold text-white hover:bg-emerald-800">
+              <h3 style="font-size: var(--fs-lg); font-weight: var(--fw-bold); color: var(--c-ink-900)">¡Turno reservado!</h3>
+              <div id="confirmacionDetalle" style="width: 100%; padding: var(--s-4); text-align: left; background: var(--c-surface-2); border: 1px solid var(--c-border); border-radius: var(--r-md)"></div>
+              <p class="help">Enviá el comprobante por WhatsApp para que el club confirme tu pago.</p>
+              <div style="display: flex; flex-direction: column; gap: var(--s-3); width: 100%">
+                <a id="btnWhatsAppConfirm" href="#" target="_blank" rel="noopener noreferrer" class="btn btn--primary btn--lg">
                   Enviar comprobante por WhatsApp
                 </a>
-                <button id="btnOtraReserva" type="button"
-                  class="rounded-lg border border-slate-300 px-4 py-2 font-semibold text-slate-700 hover:bg-slate-50">
-                  Reservar otro turno
-                </button>
+                <button id="btnOtraReserva" type="button" class="btn btn--secondary">Reservar otro turno</button>
               </div>
             </div>
           </div>
         </form>
 
-        <p id="mensaje" class="mt-3 min-h-5 font-semibold text-red-700"></p>
+        <p id="mensaje" class="sr-only" role="alert"></p>
+      </div>
+    </div>
+
+    <div id="modalConfirmar" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="confirmarTitulo">
+      <div class="modal-panel modal-panel--sm">
+        <h2 class="modal-title" id="confirmarTitulo"></h2>
+        <div id="confirmarCuerpo" style="margin-top: var(--s-3); color: var(--c-ink-700)"></div>
+        <div style="display: flex; flex-wrap: wrap; gap: var(--s-3); margin-top: var(--s-6)">
+          <button id="btnConfirmarNo" type="button" class="btn btn--secondary">Volver</button>
+          <button id="btnConfirmarSi" type="button" class="btn btn--danger" style="flex: 1 1 160px"></button>
+        </div>
       </div>
     </div>
 

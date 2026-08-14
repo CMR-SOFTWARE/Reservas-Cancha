@@ -24,13 +24,18 @@ const reservaSeleccion = document.getElementById("reservaSeleccion");
 const formReserva = document.getElementById("formReserva");
 const paso1 = document.getElementById("paso1");
 const paso2 = document.getElementById("paso2");
+const paso3 = document.getElementById("paso3");
+const stepsLabel = document.getElementById("stepsLabel");
+const alertReserva = document.getElementById("alertReserva");
+const comprobanteInput = document.getElementById("comprobante");
+const nombreArchivo = document.getElementById("nombreArchivo");
+const textoSenia = document.getElementById("textoSenia");
 const btnPaso2 = document.getElementById("btnPaso2");
 const btnVolverPaso1 = document.getElementById("btnVolverPaso1");
 const mensaje = document.getElementById("mensaje");
 const aliasTransferencia = document.getElementById("aliasTransferencia");
 const cbuTransferencia = document.getElementById("cbuTransferencia");
 const titularTransferencia = document.getElementById("titularTransferencia");
-const btnSolicitarCancelacion = document.getElementById("btnSolicitarCancelacion");
 const telefonoInput = document.getElementById("telefono");
 const contadorDisponibles = document.getElementById("contadorDisponibles");
 const cardResumen = document.getElementById("cardResumen");
@@ -42,15 +47,94 @@ let config = null;
 let reservasActuales = [];
 let bloqueosActuales = [];
 let seleccion = null;
+let enviandoReserva = false;
+let ultimoFoco = null;
 
 function formatFecha(fechaIso) {
   const [yyyy, mm, dd] = fechaIso.split("-");
   return `${dd}/${mm}/${yyyy}`;
 }
 
-function setMensaje(texto, isError = true) {
-  mensaje.textContent = texto;
-  mensaje.style.color = isError ? "#c62020" : "#1d6d2b";
+// #mensaje quedo como region para lectores de pantalla; lo visible son los
+// errores por campo y el alert arriba del boton.
+function setMensaje(texto) {
+  mensaje.textContent = texto || "";
+}
+
+const ALERTA_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>`;
+
+function setErrorCampo(idCampo, idError, texto) {
+  const campo = document.getElementById(idCampo);
+  const caja = document.getElementById(idError);
+  if (!campo || !caja) return;
+  if (!texto) {
+    caja.hidden = true;
+    caja.textContent = "";
+    campo.removeAttribute("aria-invalid");
+    return;
+  }
+  caja.innerHTML = `${ALERTA_SVG}<span>${escapeHtml(texto)}</span>`;
+  caja.hidden = false;
+  campo.setAttribute("aria-invalid", "true");
+}
+
+function limpiarErrores() {
+  setErrorCampo("nombre", "errorNombre", "");
+  setErrorCampo("telefono", "errorTelefono", "");
+  setErrorCampo("comprobante", "errorComprobante", "");
+  if (alertReserva) alertReserva.innerHTML = "";
+  setMensaje("");
+}
+
+function setAlertaReserva(texto) {
+  if (!alertReserva) return;
+  alertReserva.innerHTML = texto
+    ? `<div class="alert alert--error" role="alert">${ALERTA_SVG}<span>${escapeHtml(texto)}</span></div>`
+    : "";
+  setMensaje(texto);
+}
+
+// Los mensajes de la API no se muestran crudos: se mapean a texto util.
+function mensajeDeError(error) {
+  const crudo = String(error?.message || error || "");
+  if (/ya fue reservado|ya reservado/i.test(crudo)) {
+    return "Ese horario acaba de ser reservado por otra persona. Elegí otro horario de la lista.";
+  }
+  if (/bloqueado/i.test(crudo)) {
+    return "Ese horario acaba de ser bloqueado por el club. Elegí otro horario.";
+  }
+  if (/supera|5\s*MB/i.test(crudo)) {
+    return "Ese archivo es muy grande. El máximo es 5 MB: probá con una foto más chica.";
+  }
+  if (/imagenes|imágenes|PDF|archivo no es v/i.test(crudo)) {
+    return "Sólo aceptamos imágenes (JPG, PNG, WEBP) o PDF.";
+  }
+  if (/ya paso|ya pasó/i.test(crudo)) {
+    return "Esa fecha ya pasó. Elegí desde hoy en adelante.";
+  }
+  if (/failed to fetch|networkerror|load failed/i.test(crudo)) {
+    return "No pudimos conectarnos. Revisá tu conexión a internet y probá de nuevo.";
+  }
+  return "Algo no funcionó. Probá de nuevo en un minuto. Si sigue pasando, escribinos por WhatsApp.";
+}
+
+const PASOS = { 1: "Tus datos", 2: "Pago de la seña", 3: "Listo" };
+
+function mostrarPaso(numero) {
+  paso1.classList.toggle("hidden", numero !== 1);
+  paso2.classList.toggle("hidden", numero !== 2);
+  paso3.classList.toggle("hidden", numero !== 3);
+
+  document.querySelectorAll("#stepsIndicador .step-dot").forEach((punto) => {
+    const suyo = Number(punto.dataset.paso);
+    punto.classList.toggle("step-dot--actual", suyo === numero);
+    punto.classList.toggle("step-dot--hecho", suyo < numero);
+    punto.textContent = suyo < numero ? "✓" : String(suyo);
+  });
+  document.querySelectorAll("#stepsIndicador .step-line").forEach((linea) => {
+    linea.classList.toggle("step-line--hecho", Number(linea.dataset.linea) < numero);
+  });
+  if (stepsLabel) stepsLabel.textContent = `Paso ${numero} de 3 · ${PASOS[numero]}`;
 }
 
 function todayISO() {
@@ -306,29 +390,70 @@ function openModal(horario) {
     fecha: fechaInput.value,
     horario,
   };
-  reservaSeleccion.textContent = `${seleccion.canchaEtiqueta} - ${formatFecha(seleccion.fecha)} - ${seleccion.horario}`;
-  paso1.classList.remove("hidden");
-  paso2.classList.add("hidden");
-  document.getElementById("paso3").classList.add("hidden");
-  setMensaje("");
+  reservaSeleccion.textContent =
+    `${seleccion.canchaEtiqueta} · ${fechaEnPalabras(seleccion.fecha)} · ${rangoHorario(seleccion.horario)}`;
+  if (textoSenia) {
+    textoSenia.innerHTML = config?.precio && Number(config.precio) > 0
+      ? `Para reservar, la seña es de <strong>$${escapeHtml(config.precio)}</strong>. Si no se transfiere ese monto, el turno se cancela automáticamente.`
+      : "Para reservar hay que transferir la seña. Si no se transfiere, el turno se cancela automáticamente.";
+  }
+  limpiarErrores();
+  mostrarPaso(1);
   modal.classList.remove("hidden");
+  ultimoFoco = document.activeElement;
+  document.getElementById("nombre")?.focus();
 }
 
 function closeModal() {
+  if (enviandoReserva) return;
   modal.classList.add("hidden");
   formReserva.reset();
+  if (nombreArchivo) nombreArchivo.textContent = "Elegí una foto o PDF del comprobante";
   seleccion = null;
-  setMensaje("");
-  paso1.classList.remove("hidden");
-  paso2.classList.add("hidden");
-  document.getElementById("paso3").classList.add("hidden");
+  limpiarErrores();
+  mostrarPaso(1);
+  if (ultimoFoco && document.contains(ultimoFoco)) ultimoFoco.focus();
 }
 
 function validarPaso1() {
   const nombre = document.getElementById("nombre").value.trim();
   const telefono = document.getElementById("telefono").value.trim();
-  if (nombre.length < 3) { setMensaje("Ingresa nombre y apellido."); return false; }
-  if (!/^\d{6,15}$/.test(telefono)) { setMensaje("Ingresa un telefono valido (solo numeros)."); return false; }
+  let ok = true;
+
+  if (nombre.length < 3) {
+    setErrorCampo("nombre", "errorNombre", "Escribí tu nombre y apellido.");
+    ok = false;
+  } else {
+    setErrorCampo("nombre", "errorNombre", "");
+  }
+
+  if (!/^\d{6,15}$/.test(telefono)) {
+    setErrorCampo("telefono", "errorTelefono", "Escribí tu número sin espacios ni guiones. Ej: 3364578599");
+    ok = false;
+  } else {
+    setErrorCampo("telefono", "errorTelefono", "");
+  }
+
+  if (!ok) {
+    const primerError = document.querySelector('#paso1 [aria-invalid="true"]');
+    primerError?.focus();
+  }
+  return ok;
+}
+
+const MAX_COMPROBANTE = 5 * 1024 * 1024;
+
+function validarComprobante() {
+  const archivo = comprobanteInput?.files?.[0];
+  if (!archivo) {
+    setErrorCampo("comprobante", "errorComprobante", "Adjuntá la foto o el PDF del comprobante de transferencia.");
+    return false;
+  }
+  if (archivo.size > MAX_COMPROBANTE) {
+    setErrorCampo("comprobante", "errorComprobante", "Ese archivo es muy grande. El máximo es 5 MB: probá con una foto más chica.");
+    return false;
+  }
+  setErrorCampo("comprobante", "errorComprobante", "");
   return true;
 }
 
@@ -369,16 +494,16 @@ async function refreshHorarios() {
   renderHorarios();
 }
 
-function buildCancelacionWhatsAppUrl() {
-  const canchaOpt = canchaSelect.options[canchaSelect.selectedIndex];
-  const canchaLabel = canchaOpt ? canchaOpt.text : canchaSelect.value;
-  const fecha = fechaInput.value ? formatFecha(fechaInput.value) : "(indicar fecha)";
+// Se arma con los datos del turno elegido: antes mandaba "(indicar horario)"
+// y "(indicar datos)" porque no sabia de que turno se trataba.
+function buildCancelacionWhatsAppUrl(turno) {
   const texto = [
     "Hola, quiero solicitar la cancelacion de un turno.",
-    `Cancha: ${canchaLabel}`,
-    `Fecha: ${fecha}`,
-    "Horario: (indicar horario)",
-    "Nombre y telefono: (indicar datos)",
+    `Cancha: ${etiquetaCancha(turno.cancha)}`,
+    `Fecha: ${formatFecha(turno.fecha)}`,
+    `Horario: ${turno.horario}`,
+    `Nombre: ${turno.nombre || "(indicar nombre)"}`,
+    `Telefono: ${turno.telefono || misTelefonoInput.value.trim()}`,
   ].join("\n");
   return `https://wa.me/${config.whatsappNumero}?text=${encodeURIComponent(texto)}`;
 }
@@ -409,26 +534,79 @@ modal.addEventListener("click", (event) => {
 
 btnPaso2.addEventListener("click", () => {
   if (!validarPaso1()) return;
-  setMensaje("");
-  paso1.classList.add("hidden");
-  paso2.classList.remove("hidden");
+  limpiarErrores();
+  mostrarPaso(2);
 });
 
 btnVolverPaso1.addEventListener("click", () => {
-  paso2.classList.add("hidden");
-  paso1.classList.remove("hidden");
-  setMensaje("");
+  limpiarErrores();
+  mostrarPaso(1);
 });
 
-// La cancelacion ahora se pide desde cada turno en "Mis turnos".
-if (btnSolicitarCancelacion) {
-  btnSolicitarCancelacion.addEventListener("click", () => {
-    if (!config?.whatsappNumero) { setMensaje("No hay numero de WhatsApp configurado."); return; }
-    const confirmar = window.confirm("¿Estas seguro de que queres solicitar la cancelacion del turno?");
-    if (!confirmar) return;
-    window.location.href = buildCancelacionWhatsAppUrl();
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  if (!modalConfirmar.classList.contains("hidden")) { cerrarConfirmacion(); return; }
+  if (!modal.classList.contains("hidden")) closeModal();
+});
+
+// Copiar alias / CBU / titular
+document.querySelectorAll("[data-copiar]").forEach((boton) => {
+  boton.addEventListener("click", async () => {
+    const valor = document.getElementById(boton.dataset.copiar)?.textContent?.trim();
+    if (!valor) return;
+    try {
+      await navigator.clipboard.writeText(valor);
+      const original = boton.textContent;
+      boton.textContent = "Copiado";
+      setTimeout(() => { boton.textContent = original; }, 1500);
+    } catch (_) { /* sin permiso de portapapeles: que copie a mano */ }
+  });
+});
+
+if (comprobanteInput) {
+  comprobanteInput.addEventListener("change", () => {
+    const archivo = comprobanteInput.files?.[0];
+    if (nombreArchivo) {
+      nombreArchivo.textContent = archivo ? archivo.name : "Elegí una foto o PDF del comprobante";
+    }
+    if (archivo) validarComprobante();
   });
 }
+
+// ── Modal de confirmacion (reemplaza window.confirm) ──────────
+const modalConfirmar = document.getElementById("modalConfirmar");
+const confirmarTitulo = document.getElementById("confirmarTitulo");
+const confirmarCuerpo = document.getElementById("confirmarCuerpo");
+const btnConfirmarSi = document.getElementById("btnConfirmarSi");
+const btnConfirmarNo = document.getElementById("btnConfirmarNo");
+let accionConfirmada = null;
+let focoPrevioConfirmacion = null;
+
+function pedirConfirmacion({ titulo, cuerpo, textoAccion, onAceptar }) {
+  confirmarTitulo.textContent = titulo;
+  confirmarCuerpo.innerHTML = cuerpo;
+  btnConfirmarSi.textContent = textoAccion;
+  accionConfirmada = onAceptar;
+  focoPrevioConfirmacion = document.activeElement;
+  modalConfirmar.classList.remove("hidden");
+  btnConfirmarSi.focus();
+}
+
+function cerrarConfirmacion() {
+  modalConfirmar.classList.add("hidden");
+  accionConfirmada = null;
+  if (focoPrevioConfirmacion && document.contains(focoPrevioConfirmacion)) focoPrevioConfirmacion.focus();
+}
+
+btnConfirmarNo.addEventListener("click", cerrarConfirmacion);
+modalConfirmar.addEventListener("click", (event) => {
+  if (event.target === modalConfirmar) cerrarConfirmacion();
+});
+btnConfirmarSi.addEventListener("click", () => {
+  const accion = accionConfirmada;
+  cerrarConfirmacion();
+  if (accion) accion();
+});
 
 if (btnConfirmarReserva) {
   btnConfirmarReserva.addEventListener("click", () => {
@@ -482,15 +660,23 @@ fechaInput.addEventListener("change", syncFecha);
 
 formReserva.addEventListener("submit", async (event) => {
   event.preventDefault();
-  if (!seleccion) return;
+  if (!seleccion || enviandoReserva) return;
+  if (!validarComprobante()) return;
 
+  const reserva = { ...seleccion };
   const formData = new FormData(formReserva);
-  formData.set("cancha", seleccion.cancha);
-  formData.set("fecha", seleccion.fecha);
-  formData.set("horario", seleccion.horario);
+  formData.set("cancha", reserva.cancha);
+  formData.set("fecha", reserva.fecha);
+  formData.set("horario", reserva.horario);
+
+  const textoOriginal = btnReservar.textContent;
+  enviandoReserva = true;
+  btnReservar.disabled = true;
+  btnReservar.classList.add("is-loading");
+  btnReservar.textContent = "Guardando…";
+  setAlertaReserva("");
 
   try {
-    setMensaje("Guardando reserva...", false);
     const response = await fetch(`/api/${CLUB_SLUG}/reservas`, {
       method: "POST",
       body: formData,
@@ -498,32 +684,37 @@ formReserva.addEventListener("submit", async (event) => {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "No se pudo guardar la reserva.");
 
+    enviandoReserva = false;
+    seleccion = reserva; // refreshHorarios limpia la seleccion; el paso 3 la necesita
     await refreshHorarios();
+    seleccion = reserva;
     showConfirmacion(data);
-  } catch (error) { setMensaje(error.message || "Error al reservar."); }
+  } catch (error) {
+    setAlertaReserva(mensajeDeError(error));
+  } finally {
+    enviandoReserva = false;
+    btnReservar.disabled = false;
+    btnReservar.classList.remove("is-loading");
+    btnReservar.textContent = textoOriginal;
+  }
 });
 
 // ── Pantalla de confirmacion ──────────────────────────────────
 
 function showConfirmacion(reserva) {
-  const canchaLabel = seleccion
-    ? seleccion.canchaEtiqueta
-    : (config?.canchas?.find((c) => c.nombre === reserva.cancha)?.etiqueta || `Cancha ${reserva.cancha}`);
+  const canchaLabel = seleccion ? seleccion.canchaEtiqueta : etiquetaCancha(reserva.cancha);
   const detalle = document.getElementById("confirmacionDetalle");
   if (detalle) {
     detalle.innerHTML = [
-      `<p><strong>Nombre:</strong> ${escapeHtml(reserva.nombre)}</p>`,
-      `<p><strong>Cancha:</strong> ${escapeHtml(canchaLabel)}</p>`,
-      `<p><strong>Fecha:</strong> ${escapeHtml(formatFecha(reserva.fecha))}</p>`,
-      `<p><strong>Horario:</strong> ${escapeHtml(reserva.horario)}hs</p>`,
+      `<p><strong>${escapeHtml(canchaLabel)}</strong></p>`,
+      `<p>${escapeHtml(fechaEnPalabras(reserva.fecha))} · ${escapeHtml(rangoHorario(reserva.horario))}</p>`,
+      `<p class="help">A nombre de ${escapeHtml(reserva.nombre)}</p>`,
     ].join("");
   }
   const btnWa = document.getElementById("btnWhatsAppConfirm");
   if (btnWa) btnWa.href = buildWhatsAppUrl(reserva);
-  paso1.classList.add("hidden");
-  paso2.classList.add("hidden");
-  document.getElementById("paso3").classList.remove("hidden");
-  setMensaje("");
+  limpiarErrores();
+  mostrarPaso(3);
 }
 
 document.getElementById("btnOtraReserva").addEventListener("click", closeModal);
@@ -542,34 +733,86 @@ misTelefonoInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") btnMisReservas.click();
 });
 
+const CALENDARIO_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/></svg>`;
+const RELOJ_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`;
+
+let misTurnos = [];
+
+function renderMisTurnos() {
+  misTurnosList.innerHTML = misTurnos.map((turno, indice) => {
+    const pagado = turno.estado === "confirmada";
+    return `<article class="turno">
+      <div style="display: flex; align-items: start; justify-content: space-between; gap: var(--s-3)">
+        <h3 class="turno-cancha">${escapeHtml(etiquetaCancha(turno.cancha))}</h3>
+        <span class="badge ${pagado ? "badge--ok" : "badge--pendiente"}">${pagado ? "Pagado" : "Sin pagar"}</span>
+      </div>
+      <p class="turno-dato">${CALENDARIO_SVG}${escapeHtml(fechaEnPalabras(turno.fecha))}</p>
+      <p class="turno-dato">${RELOJ_SVG}${escapeHtml(rangoHorario(turno.horario))}</p>
+      <button type="button" class="btn btn--danger btn--sm" data-cancelar="${indice}" style="margin-top: var(--s-4)">
+        Solicitar cancelación
+      </button>
+    </article>`;
+  }).join("");
+
+  misTurnosList.querySelectorAll("[data-cancelar]").forEach((boton) => {
+    boton.addEventListener("click", () => {
+      const turno = misTurnos[Number(boton.dataset.cancelar)];
+      if (!turno) return;
+      if (!config?.whatsappNumero) {
+        misTurnosList.insertAdjacentHTML("afterbegin",
+          `<div class="alert alert--error" role="alert">${ALERTA_SVG}<span>El club no tiene WhatsApp configurado.</span></div>`);
+        return;
+      }
+      pedirConfirmacion({
+        titulo: "¿Pedir la cancelación de este turno?",
+        cuerpo: `${escapeHtml(etiquetaCancha(turno.cancha))} · ${escapeHtml(fechaEnPalabras(turno.fecha))} · ${escapeHtml(rangoHorario(turno.horario))}.<br />Te vamos a abrir WhatsApp con el mensaje ya escrito para que lo envíes al club.`,
+        textoAccion: "Abrir WhatsApp",
+        onAceptar: () => { window.open(buildCancelacionWhatsAppUrl(turno), "_blank", "noopener"); },
+      });
+    });
+  });
+}
+
+function renderMisTurnosVacio(titulo, texto) {
+  misTurnosList.innerHTML = `<div class="empty">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+      <rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/>
+    </svg>
+    <p><strong style="color: var(--c-ink-900)">${escapeHtml(titulo)}</strong><br />${escapeHtml(texto)}</p>
+  </div>`;
+}
+
 btnMisReservas.addEventListener("click", async () => {
   const tel = misTelefonoInput.value.trim();
   if (!/^\d{6,15}$/.test(tel)) {
-    misTurnosList.innerHTML = `<p class="text-sm text-red-600">Ingresá un número de teléfono válido (solo números).</p>`;
+    renderMisTurnosVacio("Revisá el número.", "Escribí tu número sin espacios ni guiones. Ej: 3364578599");
     return;
   }
-  misTurnosList.innerHTML = `<p class="text-sm text-slate-400">Buscando...</p>`;
+
+  misTurnosList.innerHTML = `<div class="skeleton" style="height: 72px"></div><div class="skeleton" style="height: 72px"></div>`;
+  const textoOriginal = btnMisReservas.textContent;
+  btnMisReservas.disabled = true;
+  btnMisReservas.textContent = "Buscando…";
+
   try {
     const response = await fetch(`/api/${CLUB_SLUG}/mis-reservas?telefono=${encodeURIComponent(tel)}`);
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Error al consultar.");
+    misTurnos = data;
     if (!data.length) {
-      misTurnosList.innerHTML = `<p class="text-sm text-slate-500">No se encontraron turnos activos para ese número.</p>`;
+      renderMisTurnosVacio(
+        "No encontramos turnos con ese número.",
+        "Revisá que sea el mismo número que usaste al reservar, sin 0 ni 15."
+      );
       return;
     }
-    misTurnosList.innerHTML = data.map((r) => {
-      const canchaLabel = config?.canchas?.find((c) => c.nombre === r.cancha)?.etiqueta || `Cancha ${escapeHtml(r.cancha)}`;
-      const estadoColor = r.estado === "confirmada"
-        ? "border-green-200 bg-green-50 text-green-700"
-        : "border-amber-200 bg-amber-50 text-amber-700";
-      const estadoLabel = r.estado === "confirmada" ? "Pagado" : "Sin pagar";
-      return `<div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-        <p class="font-semibold text-slate-800">${escapeHtml(canchaLabel)} · ${formatFecha(r.fecha)} · ${escapeHtml(r.horario)}hs</p>
-        <span class="mt-1 inline-block rounded-full border px-2 py-0.5 text-xs font-semibold ${estadoColor}">${estadoLabel}</span>
-      </div>`;
-    }).join("");
-  } catch (e) {
-    misTurnosList.innerHTML = `<p class="text-sm text-red-600">${escapeHtml(e.message)}</p>`;
+    renderMisTurnos();
+  } catch (error) {
+    misTurnosList.innerHTML =
+      `<div class="alert alert--error" role="alert">${ALERTA_SVG}<span>${escapeHtml(mensajeDeError(error))}</span></div>`;
+  } finally {
+    btnMisReservas.disabled = false;
+    btnMisReservas.textContent = textoOriginal;
   }
 });
 

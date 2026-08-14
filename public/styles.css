@@ -224,6 +224,9 @@ a:hover { color: var(--c-brand-800); text-decoration: underline; }
   font-size: var(--fs-sm);
   color: var(--c-danger);
 }
+/* Sin tamano explicito el SVG se estira a todo el ancho disponible. */
+.error-text svg { flex: none; width: 16px; height: 16px; }
+.turno .alert svg, .empty svg { flex: none; }
 
 /* Zona de carga de archivo */
 .file-drop {
@@ -238,6 +241,42 @@ a:hover { color: var(--c-brand-800); text-decoration: underline; }
   cursor: pointer;
 }
 .file-drop:hover { border-color: var(--c-brand-700); }
+
+/* Dato de transferencia con su boton de copiar */
+.dato-copiable {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  font-size: var(--fs-base);
+  overflow-wrap: anywhere;
+}
+.dato-copiable + .dato-copiable { border-top: 1px solid var(--c-border); }
+.dato-copiable .label { font-size: var(--fs-sm); color: var(--c-ink-500); }
+.dato-copiable .btn { flex: none; }
+
+/* Turno en "Mis turnos" */
+.turno {
+  padding: var(--s-4);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+}
+.turno-cancha {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-bold);
+  color: var(--c-ink-900);
+}
+.turno-dato {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-top: var(--s-2);
+  font-size: var(--fs-sm);
+  color: var(--c-ink-700);
+}
+.turno-dato svg { flex: none; width: 16px; height: 16px; color: var(--c-ink-500); }
 
 /* ── Chips de fecha rápida ────────────────────────────────── */
 .chips { display: flex; flex-wrap: wrap; gap: var(--s-2); }
