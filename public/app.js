@@ -251,6 +251,29 @@ function findBloqueo(horario) {
   });
 }
 
+// El precio del club se guarda como texto libre. Si es un numero, se muestra
+// con separador de miles ("12000" -> "12.000"); si el club escribio otra cosa,
+// se respeta tal cual.
+function formatPrecio(valor) {
+  const limpio = String(valor ?? "").trim();
+  // Ya viene con separador de miles ("12.000"): se deja como esta.
+  if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(limpio)) return limpio;
+  // Entero o decimal con coma: se agrupa.
+  if (/^\d+(,\d+)?$/.test(limpio)) {
+    const numero = Number(limpio.replace(",", "."));
+    if (Number.isFinite(numero)) return numero.toLocaleString("es-AR");
+  }
+  // Cualquier otra cosa que haya escrito el club, tal cual.
+  return limpio;
+}
+
+function tienePrecio() {
+  const limpio = String(config?.precio ?? "").trim();
+  if (!limpio) return false;
+  const numero = Number(limpio.replace(/\./g, "").replace(",", "."));
+  return Number.isFinite(numero) ? numero > 0 : true;
+}
+
 // "13:00" -> "13:00 – 14:00". El usuario no tiene que deducir cuanto dura.
 function rangoHorario(horario) {
   const hora = Number(String(horario).split(":")[0]);
@@ -369,8 +392,8 @@ function seleccionarHorario(horario) {
   });
 
   if (!cardResumen) return;
-  const senia = config?.precio && Number(config.precio) > 0
-    ? `<p>Seña: <strong>$${escapeHtml(config.precio)}</strong> por transferencia</p>`
+  const senia = tienePrecio()
+    ? `<p>Seña: <strong>$${escapeHtml(formatPrecio(config.precio))}</strong> por transferencia</p>`
     : "";
   resumenDetalle.innerHTML = `
     <p><strong>${escapeHtml(seleccion.canchaEtiqueta)}</strong></p>
@@ -405,8 +428,8 @@ function openModal(horario) {
   reservaSeleccion.textContent =
     `${seleccion.canchaEtiqueta} · ${fechaEnPalabras(seleccion.fecha)} · ${rangoHorario(seleccion.horario)}`;
   if (textoSenia) {
-    textoSenia.innerHTML = config?.precio && Number(config.precio) > 0
-      ? `Para reservar, la seña es de <strong>$${escapeHtml(config.precio)}</strong>. Si no se transfiere ese monto, el turno se cancela automáticamente.`
+    textoSenia.innerHTML = tienePrecio()
+      ? `Para reservar, la seña es de <strong>$${escapeHtml(formatPrecio(config.precio))}</strong>. Si no se transfiere ese monto, el turno se cancela automáticamente.`
       : "Para reservar hay que transferir la seña. Si no se transfiere, el turno se cancela automáticamente.";
   }
   limpiarErrores();
