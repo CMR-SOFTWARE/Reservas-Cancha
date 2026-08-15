@@ -349,8 +349,10 @@ document.getElementById("filtroEstado")?.addEventListener("change", () => {
 });
 
 function setAuthenticatedUI(isAuth) {
-  loginCard.classList.toggle("hidden", isAuth);
-  adminPanel.classList.toggle("hidden", !isAuth);
+  // Atributo hidden y no clase: cada pantalla tiene su propio <main>, y el
+  // landmark del que esta oculto tiene que quedar fuera del arbol accesible.
+  loginCard.hidden = isAuth;
+  adminPanel.hidden = !isAuth;
   const acciones = document.getElementById("topbarAcciones");
   if (acciones) acciones.hidden = !isAuth;
 }
@@ -685,11 +687,11 @@ async function loadCanchas() {
   const atLimit = activas >= maxCanchas;
 
   const planBadge = `
-    <div class="flex items-center justify-between mb-2">
-      <span class="text-xs font-semibold text-slate-500">
-        Plan <strong class="text-slate-700">${escapeHtml(planNombre)}</strong> — ${activas}/${maxCanchas} cancha${maxCanchas === 1 ? "" : "s"}
+    <div class="reservas-cabecera" style="margin-bottom: var(--s-3)">
+      <span class="help">
+        Plan <strong style="color: var(--c-ink-900)">${escapeHtml(planNombre)}</strong> — ${activas}/${maxCanchas} cancha${maxCanchas === 1 ? "" : "s"}
       </span>
-      ${atLimit ? `<span class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">Límite alcanzado</span>` : ""}
+      ${atLimit ? `<span class="badge badge--pendiente">Límite alcanzado</span>` : ""}
     </div>
   `;
 
@@ -815,20 +817,22 @@ function renderBloqueosRecurrentes(bloqueos) {
   const container = document.getElementById("bloqueosRecurrentesList");
   if (!container) return;
   if (!bloqueos.length) {
-    container.innerHTML = "<p class='text-sm text-slate-500'>No hay bloqueos recurrentes.</p>";
+    container.innerHTML = `<p class="help">No hay bloqueos recurrentes.</p>`;
     return;
   }
   container.innerHTML = bloqueos.map((b) => {
     const canchaLabel = getCanchaEtiqueta(b.cancha);
     const diaLabel = DAY_LABELS_FULL[b.diaSemana] ?? `Día ${b.diaSemana}`;
     const horarioLabel = b.diaCompleto ? "Día completo" : `${b.horarioDesde} — ${b.horarioHasta}`;
-    return `<article class="flex items-start justify-between gap-3 rounded-lg border border-violet-100 bg-violet-50 p-3">
+    const detalle = `${canchaLabel}, todos los ${diaLabel.toLowerCase()}, ${horarioLabel.toLowerCase()}`;
+    return `<article class="recurrente-card">
       <div>
-        <p class="font-semibold text-slate-800">${escapeHtml(canchaLabel)} — todos los ${escapeHtml(diaLabel)}</p>
-        <p class="text-sm text-slate-600">${escapeHtml(horarioLabel)}${b.motivo ? ` · ${escapeHtml(b.motivo)}` : ""}</p>
+        <p class="bloqueo-cancha">${escapeHtml(canchaLabel)}</p>
+        <span class="badge badge--pendiente" style="margin-top: var(--s-1)">Todos los ${escapeHtml(diaLabel.toLowerCase())}</span>
+        <p class="bloqueo-motivo" style="margin-top: var(--s-2)">${escapeHtml(horarioLabel)}${b.motivo ? ` · ${escapeHtml(b.motivo)}` : ""}</p>
       </div>
-      <button class="shrink-0 rounded-lg bg-red-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-800"
-        data-action="quitar-bloqueo-rec" data-id="${b.id}" type="button">Quitar</button>
+      <button class="btn btn--danger btn--sm" data-action="quitar-bloqueo-rec" data-id="${b.id}"
+        data-detalle="${escapeHtml(detalle)}" type="button">Quitar</button>
     </article>`;
   }).join("");
 }
@@ -952,12 +956,12 @@ function renderCalGrid(dates, reservasPorDia, bloqueos, cancha) {
   dates.forEach((fecha, i) => { reservaMap[fecha] = reservasPorDia[i] || []; });
 
   const thead = `<thead><tr>
-    <th class="sticky left-0 z-10 min-w-[52px] border-b border-r border-slate-200 bg-slate-50 px-2 py-2 text-xs font-semibold text-slate-500">Hora</th>
+    <th class="cal-hora">Hora</th>
     ${dates.map((fecha, i) => {
       const [, mm, dd] = fecha.split("-");
       const isToday = fecha === todayStr;
-      return `<th class="min-w-[90px] border-b border-r border-slate-200 px-2 py-2 text-xs font-semibold ${isToday ? "bg-green-50 text-green-800" : "bg-slate-50 text-slate-500"}">
-        ${escapeHtml(DAY_NAMES[i])}<br/><span class="font-normal">${dd}/${mm}</span>
+      return `<th${isToday ? " class=\"cal-hoy\"" : ""}>
+        ${escapeHtml(DAY_NAMES[i])}<br/><span style="font-weight: var(--fw-regular)">${dd}/${mm}</span>
       </th>`;
     }).join("")}
   </tr></thead>`;
@@ -971,31 +975,31 @@ function renderCalGrid(dates, reservasPorDia, bloqueos, cancha) {
       const pasado = new Date(y, mo - 1, d, h, m).getTime() < Date.now();
 
       if (bloqueo) {
-        return `<td class="border-r border-b border-slate-200 bg-amber-50 px-1.5 py-1.5 align-top text-xs">
-          <span class="block font-semibold leading-tight text-amber-700">Bloqueado</span>
-          ${bloqueo.motivo ? `<span class="block max-w-[80px] truncate leading-tight text-amber-600">${escapeHtml(bloqueo.motivo)}</span>` : ""}
+        return `<td class="cal-bloqueado">
+          <span class="cal-dato" style="font-weight: var(--fw-semi)">Bloqueado</span>
+          ${bloqueo.motivo ? `<span class="cal-dato">${escapeHtml(bloqueo.motivo)}</span>` : ""}
         </td>`;
       }
       if (reserva) {
-        const color = reserva.estado === "confirmada" ? "text-green-700" : "text-amber-700";
+        const color = reserva.estado === "confirmada" ? "var(--c-success)" : "var(--c-warning)";
         const label = reserva.estado === "confirmada" ? "Pagado" : "Sin pagar";
-        return `<td class="border-r border-b border-slate-200 bg-blue-50 px-1.5 py-1.5 align-top text-xs">
-          <span class="block max-w-[80px] truncate font-semibold leading-tight text-slate-700">${escapeHtml(reserva.nombre)}</span>
-          <span class="block leading-tight ${color}">${escapeHtml(label)}</span>
+        return `<td class="cal-ocupado">
+          <span class="cal-dato" style="font-weight: var(--fw-semi)">${escapeHtml(reserva.nombre)}</span>
+          <span class="cal-dato" style="color: ${color}">${escapeHtml(label)}</span>
         </td>`;
       }
       if (pasado) {
-        return `<td class="border-r border-b border-slate-200 bg-slate-50 px-1.5 py-1.5 text-xs text-slate-300">—</td>`;
+        return `<td class="cal-pasado">—</td>`;
       }
-      return `<td class="border-r border-b border-slate-200 bg-emerald-50 px-1.5 py-1.5 text-xs text-emerald-400">libre</td>`;
+      return `<td class="cal-libre">libre</td>`;
     }).join("");
     return `<tr>
-      <td class="sticky left-0 z-10 border-r border-b border-slate-200 bg-slate-50 px-2 py-2 text-xs font-mono font-semibold text-slate-600">${escapeHtml(horario)}</td>
+      <td class="cal-hora">${escapeHtml(horario)}</td>
       ${cells}
     </tr>`;
   }).join("");
 
-  calGrid.innerHTML = `<table class="w-full border-collapse text-left">${thead}<tbody>${tbody}</tbody></table>`;
+  calGrid.innerHTML = `<table>${thead}<tbody>${tbody}</tbody></table>`;
 }
 
 async function loadCalendario() {
@@ -1005,7 +1009,7 @@ async function loadCalendario() {
   const cancha = calCanchaEl.value;
   const dates = getWeekDates(calSemanaOffset);
   updateCalLabel(dates);
-  calGrid.innerHTML = `<div class="p-4 text-sm text-slate-400">Cargando...</div>`;
+  calGrid.innerHTML = `<div class="skeleton" style="height: 200px; margin: var(--s-3)"></div>`;
   try {
     const [reservasPorDia, todosBloqueos] = await Promise.all([
       Promise.all(
@@ -1019,7 +1023,7 @@ async function loadCalendario() {
     ]);
     renderCalGrid(dates, reservasPorDia, todosBloqueos, cancha);
   } catch (e) {
-    calGrid.innerHTML = `<div class="p-4 text-sm text-red-600">${escapeHtml(e.message)}</div>`;
+    calGrid.innerHTML = `<div class="alert alert--error" role="alert" style="margin: var(--s-3)">${ICONO_ALERTA}<span>${escapeHtml(e.message)}</span></div>`;
   }
 }
 
