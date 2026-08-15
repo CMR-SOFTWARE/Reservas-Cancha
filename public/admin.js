@@ -174,54 +174,67 @@ function whatsappHref(r) {
 }
 
 function estadoBadge(estado, pasada = false) {
-  if (pasada) {
-    return `<span class="rounded-full px-2 py-0.5 text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">Pasado</span>`;
-  }
-  const estilos = {
-    pendiente: "bg-amber-100 text-amber-800 border border-amber-200",
-    confirmada: "bg-green-100 text-green-800 border border-green-200",
-  };
-  const labels = { pendiente: "Sin pagar", confirmada: "Pagado" };
-  const cls = estilos[estado] || estilos.pendiente;
-  const label = labels[estado] || "Sin pagar";
-  return `<span class="rounded-full px-2 py-0.5 text-xs font-semibold ${cls}">${label}</span>`;
+  if (pasada) return `<span class="badge">Pasado</span>`;
+  const esPagado = estado === "confirmada";
+  return `<span class="badge ${esPagado ? "badge--ok" : "badge--pendiente"}">${esPagado ? "Pagado" : "Sin pagar"}</span>`;
 }
 
 function renderReservas(reservas) {
-  if (!reservas.length) { reservasList.innerHTML = "<p>No hay reservas.</p>"; return; }
+  if (!reservas.length) {
+    reservasList.innerHTML = `<div class="empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/>
+      </svg>
+      <p><strong style="color: var(--c-ink-900)">${filtroFecha.value ? "No hay turnos para esa fecha." : "Todavía no hay turnos."}</strong></p>
+      ${filtroFecha.value ? `<button type="button" class="btn btn--secondary btn--sm" id="btnVerTodasVacio">Ver todas las reservas</button>` : ""}
+    </div>`;
+    document.getElementById("btnVerTodasVacio")?.addEventListener("click", () => {
+      filtroFecha.value = "";
+      loadReservasAdmin("");
+    });
+    return;
+  }
   const sorted = [...reservas].sort((a, b) => {
     if (Boolean(a.pasada) !== Boolean(b.pasada)) return a.pasada ? 1 : -1;
     if (a.estado === "pendiente" && b.estado !== "pendiente") return -1;
     if (a.estado !== "pendiente" && b.estado === "pendiente") return 1;
     return 0;
   });
-  reservasList.innerHTML = sorted.map((r) => `
-    <article class="rounded-lg border border-green-100 bg-white p-3 shadow-sm ${r.pasada ? "opacity-70" : ""}">
-      <div class="mb-1 flex items-center gap-2">
+  reservasList.innerHTML = sorted.map((r) => {
+    const detalle = `${getCanchaEtiqueta(r.cancha)}, ${fechaEnPalabras(r.fecha).toLowerCase()}, ${r.horario}. Reservado por ${r.nombre}.`;
+    const telefonoLimpio = String(r.telefono).replace(/\D/g, "");
+    return `
+    <article class="reserva-card${r.pasada ? " es-pasada" : ""}">
+      <div class="reserva-cabecera">
+        <p class="reserva-turno">${escapeHtml(getCanchaEtiqueta(r.cancha))} · ${escapeHtml(r.horario)}</p>
         ${estadoBadge(r.estado, r.pasada)}
-        <strong>${escapeHtml(r.nombre)}</strong> — ${escapeHtml(r.telefono)}
       </div>
-      <p class="text-sm text-slate-600">${escapeHtml(getCanchaEtiqueta(r.cancha))} · ${formatFecha(r.fecha)} · ${escapeHtml(r.horario)}</p>
-      <p class="mt-1">
-        <a href="${escapeHtml(r.comprobanteUrl)}" target="_blank" rel="noopener noreferrer"
-           class="text-sm text-green-700 underline hover:text-green-900">Ver comprobante</a>
-      </p>
-      <div class="mt-2 flex flex-wrap gap-2">
-        ${r.pasada ? "" : (r.estado === "pendiente"
-          ? `<button class="rounded-lg bg-green-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-green-800"
-               data-action="confirmar" data-id="${r.id}" type="button">Marcar pagado</button>`
-          : `<button class="rounded-lg bg-green-900 px-3 py-1.5 text-sm font-semibold text-white hover:bg-green-950"
-               data-action="revertir" data-id="${r.id}" type="button">Marcar sin pagar</button>`)}
-        <a href="${escapeHtml(whatsappHref(r))}" target="_blank" rel="noopener noreferrer"
-           class="rounded-lg bg-green-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-green-700">
-          WhatsApp
+      <p class="turno-dato">${ICONO_CALENDARIO}${escapeHtml(fechaEnPalabras(r.fecha))}</p>
+      <p class="reserva-nombre">${escapeHtml(r.nombre)}</p>
+      <p class="turno-dato">
+        ${ICONO_TELEFONO}
+        <a href="tel:${escapeHtml(telefonoLimpio)}">${escapeHtml(r.telefono)}</a>
+        <a href="${escapeHtml(whatsappHref(r))}" target="_blank" rel="noopener noreferrer" title="Escribir por WhatsApp">
+          ${ICONO_WHATSAPP}<span class="sr-only">Escribir por WhatsApp a ${escapeHtml(r.nombre)}</span>
         </a>
-        ${r.pasada ? "" : `<button class="rounded-lg bg-red-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-800"
-          data-action="cancelar" data-id="${r.id}" type="button">Cancelar turno</button>`}
+      </p>
+      <div class="reserva-acciones">
+        <a href="${escapeHtml(r.comprobanteUrl)}" target="_blank" rel="noopener noreferrer" class="btn btn--secondary btn--sm">
+          Ver comprobante
+        </a>
+        ${r.pasada ? "" : (r.estado === "pendiente"
+          ? `<button class="btn btn--secondary btn--sm" data-action="confirmar" data-id="${r.id}" type="button">Marcar como pagada</button>`
+          : `<button class="btn btn--secondary btn--sm" data-action="revertir" data-id="${r.id}" type="button">Marcar sin pagar</button>`)}
+        ${r.pasada ? "" : `<button class="btn btn--danger btn--sm" data-action="cancelar" data-id="${r.id}"
+          data-detalle="${escapeHtml(detalle)}" type="button">Cancelar turno</button>`}
       </div>
-    </article>
-  `).join("");
+    </article>`;
+  }).join("");
 }
+
+const ICONO_CALENDARIO = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/></svg>`;
+const ICONO_TELEFONO = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.3 1.8.6 2.6a2 2 0 0 1-.5 2.1L8.1 9.5a16 16 0 0 0 6 6l1.1-1.1a2 2 0 0 1 2.1-.5c.8.3 1.7.5 2.6.6a2 2 0 0 1 1.7 2z"/></svg>`;
+const ICONO_WHATSAPP = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:16px;height:16px"><path d="M12 2a10 10 0 0 0-8.5 15.2L2 22l4.9-1.5A10 10 0 1 0 12 2zm0 18a8 8 0 0 1-4.1-1.1l-.3-.2-2.9.8.8-2.8-.2-.3A8 8 0 1 1 12 20zm4.4-5.6c-.2-.1-1.4-.7-1.6-.8-.2-.1-.4-.1-.5.1l-.7.9c-.1.2-.3.2-.5.1a6.5 6.5 0 0 1-3.2-2.8c-.1-.2 0-.4.1-.5l.4-.5.2-.4v-.4l-.8-1.8c-.2-.5-.4-.4-.5-.4h-.5a1 1 0 0 0-.7.3c-.3.3-1 1-1 2.4s1 2.8 1.2 3a9.6 9.6 0 0 0 4.9 4.3c1.3.4 1.8.4 2.4.3.7-.1 1.4-.6 1.6-1.2.2-.6.2-1.1.1-1.2z"/></svg>`;
 
 function renderBloqueos(bloqueos) {
   if (!bloqueos.length) {
@@ -269,7 +282,10 @@ async function loadReservasAdmin(fecha = "") {
   const qs = fecha ? `?fecha=${encodeURIComponent(fecha)}` : "";
   const reservas = await api(`/api/${CLUB_SLUG}/admin/reservas${qs}`);
   reservasActuales = reservas;
-  renderReservas(reservas);
+  // El estado se filtra en el cliente: la API no tiene ese parametro y no se
+  // inventan endpoints.
+  const estado = document.getElementById("filtroEstado")?.value || "";
+  renderReservas(estado ? reservas.filter((r) => (r.estado || "pendiente") === estado) : reservas);
 }
 
 async function refreshAdminData() {
@@ -323,7 +339,13 @@ btnFiltrarReservas.addEventListener("click", () => loadReservasAdmin(filtroFecha
 
 btnLimpiarFiltro.addEventListener("click", () => {
   filtroFecha.value = "";
+  const estado = document.getElementById("filtroEstado");
+  if (estado) estado.value = "";
   loadReservasAdmin("");
+});
+
+document.getElementById("filtroEstado")?.addEventListener("change", () => {
+  loadReservasAdmin(filtroFecha.value);
 });
 
 function setAuthenticatedUI(isAuth) {
@@ -339,6 +361,9 @@ function mostrarSeccion(nombre) {
   document.querySelectorAll(".panel-seccion").forEach((seccion) => {
     seccion.classList.toggle("hidden", seccion.dataset.panel !== nombre);
   });
+  // Los datos del club se piden al entrar a Configuracion, como antes hacia el
+  // acordeon al abrirse.
+  if (nombre === "configuracion") loadConfigPanel();
   document.querySelectorAll(".panel-nav-item").forEach((item) => {
     item.classList.toggle("is-activa", item.dataset.seccion === nombre);
   });
@@ -614,10 +639,6 @@ async function cancelarTurno(id) {
 
 // ── Configuración del club ────────────────────────────────────
 
-const btnToggleConfig = document.getElementById("btnToggleConfig");
-const configPanel = document.getElementById("configPanel");
-const configChevron = document.getElementById("configChevron");
-
 const cfgNombre = document.getElementById("cfgNombre");
 const cfgWhatsapp = document.getElementById("cfgWhatsapp");
 const cfgHoraInicio = document.getElementById("cfgHoraInicio");
@@ -640,11 +661,7 @@ const cfgPassNuevo = document.getElementById("cfgPassNuevo");
 const btnCambiarPass = document.getElementById("btnCambiarPass");
 const cfgPassMsg = document.getElementById("cfgPassMsg");
 
-btnToggleConfig.addEventListener("click", () => {
-  const hidden = configPanel.classList.toggle("hidden");
-  configChevron.style.transform = hidden ? "" : "rotate(180deg)";
-  if (!hidden) loadConfigPanel();
-});
+// El acordeon se elimino: la configuracion se carga al entrar a su seccion.
 
 function fillClubForm(cfg) {
   cfgNombre.value = cfg.nombre || "";
@@ -677,17 +694,17 @@ async function loadCanchas() {
   `;
 
   if (!canchas.length) {
-    canchasList.innerHTML = planBadge + "<p class='text-slate-500 text-sm'>No hay canchas cargadas.</p>";
+    canchasList.innerHTML = planBadge + `<p class="help">No hay canchas cargadas.</p>`;
     return;
   }
   canchasList.innerHTML = planBadge + canchas.map((c) => `
-    <div class="flex items-center gap-2 rounded-lg border border-green-100 bg-green-50 px-3 py-2" data-cancha-id="${c.id}">
-      <span class="font-mono text-sm bg-green-200 text-green-900 rounded px-2 py-0.5">${escapeHtml(c.nombre)}</span>
-      <input type="text" value="${escapeHtml(c.etiqueta)}" class="flex-1 rounded border border-slate-300 px-2 py-1 text-sm cancha-etiqueta-input focus:outline-none focus:ring-1 focus:ring-green-500" data-id="${c.id}" />
-      <button class="rounded bg-green-700 px-2 py-1 text-xs font-semibold text-white hover:bg-green-800"
-        data-action="renombrar-cancha" data-id="${c.id}" type="button">Guardar</button>
-      <button class="rounded bg-red-600 px-2 py-1 text-xs font-semibold text-white hover:bg-red-700"
-        data-action="eliminar-cancha" data-id="${c.id}" type="button">Eliminar</button>
+    <div class="cancha-fila" data-cancha-id="${c.id}">
+      <span class="cancha-nombre">${escapeHtml(c.nombre)}</span>
+      <input type="text" value="${escapeHtml(c.etiqueta)}" class="input cancha-etiqueta-input" data-id="${c.id}"
+        aria-label="Etiqueta de la cancha ${escapeHtml(c.nombre)}" />
+      <button class="btn btn--secondary btn--sm" data-action="renombrar-cancha" data-id="${c.id}" type="button">Guardar</button>
+      <button class="btn btn--danger btn--sm" data-action="eliminar-cancha" data-id="${c.id}"
+        data-etiqueta="${escapeHtml(c.etiqueta)}" type="button">Eliminar</button>
     </div>
   `).join("");
 }
@@ -697,8 +714,7 @@ async function loadConfigPanel() {
     fillClubForm(config);
     await loadCanchas();
   } catch (error) {
-    cfgClubMsg.textContent = error.message || "No se pudo cargar la configuracion.";
-    cfgClubMsg.style.color = "#c62020";
+    setMessage(cfgClubMsg, error.message || "No se pudo cargar la configuracion.");
   }
 }
 
@@ -1012,12 +1028,10 @@ function setVista(vista) {
   vistaLista?.classList.toggle("hidden", !isLista);
   vistaCalendario?.classList.toggle("hidden", isLista);
   filtrosLista?.classList.toggle("hidden", !isLista);
-  btnVistaLista?.classList.toggle("bg-green-800", isLista);
-  btnVistaLista?.classList.toggle("text-white", isLista);
-  btnVistaLista?.classList.toggle("text-green-800", !isLista);
-  btnVistaCalendario?.classList.toggle("bg-green-800", !isLista);
-  btnVistaCalendario?.classList.toggle("text-white", !isLista);
-  btnVistaCalendario?.classList.toggle("text-green-800", isLista);
+  btnVistaLista?.classList.toggle("is-activa", isLista);
+  btnVistaLista?.setAttribute("aria-pressed", String(isLista));
+  btnVistaCalendario?.classList.toggle("is-activa", !isLista);
+  btnVistaCalendario?.setAttribute("aria-pressed", String(!isLista));
   if (!isLista) loadCalendario();
 }
 
