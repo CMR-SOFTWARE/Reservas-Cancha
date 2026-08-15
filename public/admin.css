@@ -203,6 +203,120 @@
 @media (min-width: 768px) { .grilla-cards { grid-template-columns: repeat(2, 1fr); } }
 @media (min-width: 1200px) { .grilla-cards { grid-template-columns: repeat(3, 1fr); } }
 
+/* ── Seccion Reservas ─────────────────────────────────────── */
+.reservas-cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+
+.segmented {
+  display: inline-flex;
+  height: 40px;
+  padding: 3px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--r-md);
+}
+.segmented-item {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--s-4);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semi);
+  color: var(--c-ink-700);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: background-color var(--t-fast), color var(--t-fast);
+}
+.segmented-item:hover { color: var(--c-brand-800); }
+.segmented-item.is-activa { color: #fff; background: var(--c-brand-700); }
+
+.filtros {
+  display: grid;
+  gap: var(--s-3);
+  margin-top: var(--s-4);
+}
+.filtros-acciones { display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: end; }
+@media (min-width: 768px) {
+  .filtros { grid-template-columns: repeat(2, minmax(160px, 220px)) 1fr; align-items: end; }
+  .filtros-acciones { justify-content: flex-start; }
+  /* El export va a la derecha del todo, separado de los filtros. */
+  .filtros-export { margin-left: auto; }
+}
+
+.reserva-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  padding: var(--s-4);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+}
+.reserva-card.es-pasada { background: var(--c-surface-2); }
+.reserva-cabecera {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+.reserva-turno { font-size: var(--fs-md); font-weight: var(--fw-bold); color: var(--c-ink-900); }
+.reserva-nombre { margin-top: var(--s-2); font-weight: var(--fw-semi); color: var(--c-ink-900); }
+.reserva-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin-top: var(--s-4);
+}
+.reserva-acciones .btn { min-height: 40px; }
+
+/* ── Configuracion ────────────────────────────────────────── */
+.config-grid { display: grid; gap: var(--s-4); }
+@media (min-width: 768px) { .config-grid { grid-template-columns: repeat(2, 1fr); } }
+
+/* El margen entre campos apilados no corresponde dentro de una grilla: el gap
+   ya separa, y el margen desalineaba las columnas entre si. */
+.config-grid .field + .field,
+.filtros .field + .field,
+.cancha-nueva .field + .field { margin-top: 0; }
+
+.config-subtitulo {
+  margin-top: var(--s-6);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semi);
+  color: var(--c-ink-900);
+}
+
+.cancha-fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-3);
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+}
+.cancha-nombre {
+  padding: 2px var(--s-2);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semi);
+  color: var(--c-brand-800);
+  background: var(--c-brand-50);
+  border-radius: var(--r-sm);
+}
+.cancha-fila .input { flex: 1 1 160px; height: 40px; }
+.cancha-nueva {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  align-items: end;
+  margin-top: var(--s-4);
+}
+
 /* ── Bloqueo en card ──────────────────────────────────────── */
 .bloqueo-card {
   padding: var(--s-4);
