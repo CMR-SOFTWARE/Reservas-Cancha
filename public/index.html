@@ -54,7 +54,15 @@
                 <button type="button" class="chip" id="chipOtro" aria-pressed="false">Elegir otro día</button>
               </div>
               <label class="sr-only" for="fecha">Fecha</label>
-              <input id="fecha" type="date" class="input" />
+              <div class="fecha-fila">
+                <button type="button" class="btn btn--secondary fecha-flecha" id="btnDiaAnterior" aria-label="Día anterior">
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+                </button>
+                <input id="fecha" type="date" class="input" />
+                <button type="button" class="btn btn--secondary fecha-flecha" id="btnDiaSiguiente" aria-label="Día siguiente">
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+                </button>
+              </div>
               <p class="help" id="fechaEnPalabras"></p>
             </div>
           </div>

@@ -14,7 +14,7 @@
     <header class="site-header">
       <div class="site-header-inner">
         <a href="/" class="site-brand">
-          <img src="/favicon.png" alt="" class="site-logo" />
+          <div id="navLogo" class="site-logo" aria-hidden="true"></div>
           <span class="site-texto"><span class="site-club">CMR Canchas</span><span class="site-sufijo"> · Panel</span></span>
         </a>
         <div class="topbar-acciones" id="topbarAcciones" hidden>
@@ -36,7 +36,7 @@
 
     <main id="loginCard" class="login-pantalla">
       <div class="card login-card">
-        <img src="/favicon.png" alt="" class="login-logo" />
+        <div id="loginLogo" class="login-logo" aria-hidden="true"></div>
         <h1 class="login-titulo">Panel de administración</h1>
         <p class="card-sub" id="loginClub"></p>
 
@@ -290,9 +290,10 @@
             <div class="field">
               <label class="label" for="filtroEstado">Estado</label>
               <select id="filtroEstado" class="select">
-                <option value="">Todas</option>
-                <option value="confirmada">Pagadas</option>
-                <option value="pendiente">Sin pagar</option>
+                <option value="">Turnos vigentes</option>
+                <option value="confirmada">Vigentes pagadas</option>
+                <option value="pendiente">Vigentes sin pagar</option>
+                <option value="pasadas">Historial (turnos pasados)</option>
               </select>
             </div>
             <div class="filtros-acciones">

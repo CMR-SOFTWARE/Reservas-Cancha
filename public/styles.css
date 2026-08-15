@@ -287,6 +287,11 @@ a:hover { color: var(--c-brand-800); text-decoration: underline; }
 }
 .turno-dato svg { flex: none; width: 16px; height: 16px; color: var(--c-ink-500); }
 
+/* Fecha con flechas para moverse de a un dia sin abrir el calendario. */
+.fecha-fila { display: flex; align-items: center; gap: var(--s-2); }
+.fecha-fila .input { flex: 1; min-width: 0; }
+.fecha-flecha { flex: none; width: 48px; padding: 0; }
+
 /* ── Chips de fecha rápida ────────────────────────────────── */
 .chips { display: flex; flex-wrap: wrap; gap: var(--s-2); }
 

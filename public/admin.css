@@ -12,7 +12,20 @@
   padding: var(--s-6) var(--pad-page);
 }
 .login-card { width: 100%; max-width: 400px; box-shadow: var(--sh-sm); }
-.login-logo { width: 48px; height: 48px; border-radius: var(--r-sm); object-fit: contain; }
+/* Sirve como <div> con iniciales y como <img> con el logo del club. */
+.login-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  font-size: var(--fs-md);
+  font-weight: var(--fw-bold);
+  color: #fff;
+  object-fit: cover;
+  background: var(--c-brand-700);
+  border-radius: 50%;
+}
 .login-titulo {
   margin-top: var(--s-4);
   font-size: var(--fs-xl);
