@@ -286,7 +286,7 @@ function renderBloqueos(todos) {
     <article class="bloqueo-card">
       <div style="display: flex; align-items: start; justify-content: space-between; gap: var(--s-3)">
         <p class="bloqueo-cancha">${escapeHtml(getCanchaEtiqueta(b.cancha))}</p>
-        <span class="badge badge--pendiente">Bloqueado</span>
+        <span class="badge badge--bloqueado">Bloqueado</span>
       </div>
       <p style="margin-top: var(--s-2)">${escapeHtml(formatFecha(b.fecha))}</p>
       <p>${escapeHtml(describeBloqueoHorario(b))}</p>

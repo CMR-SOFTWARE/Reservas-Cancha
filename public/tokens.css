@@ -21,20 +21,30 @@
   --c-border-strong: #C2CDD6; /* borde de input */
 
   /* ── Estados de horario ────────────────────────────────── */
+  /* Libre = verde, ocupado = naranja, bloqueado = rojo. */
   --c-free-bg:     #E8F5EE;
   --c-free-border: #A9D9BE;
   --c-free-text:   #0F5730;
   --c-free-dot:    #15703F;
 
+  /* Ocupado: alguien saco ese turno. */
+  --c-taken-bg:     #FFF1E3;
+  --c-taken-border: #F3C89B;
+  --c-taken-text:   #8A4B00;
+  --c-taken-dot:    #C96A08;
+
+  /* Bloqueado por administracion. */
+  --c-block-bg:     #FEF3F2;
+  --c-block-border: #F5C4BF;
+  --c-block-text:   #A32117;
+  --c-block-dot:    #B42318;
+
+  /* Neutro: controles deshabilitados y horarios que ya pasaron. No es un
+     estado de disponibilidad, por eso queda gris y aparte. */
   --c-busy-bg:     #EEF1F4;
   --c-busy-border: #DDE4EA;
   --c-busy-text:   #5B6875;
   --c-busy-dot:    #8996A3;
-
-  --c-block-bg:     #FFF4E0;
-  --c-block-border: #F0D3A0;
-  --c-block-text:   #8A5200;
-  --c-block-dot:    #C77A00;
 
   /* ── Feedback ──────────────────────────────────────────── */
   --c-danger:     #B42318;

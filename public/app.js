@@ -313,7 +313,7 @@ function renderHorarios() {
     let libre = false;
 
     if (pasado) {
-      clase = "slot--ocupado";
+      clase = "slot--pasado";
       estado = "Ya pasó";
     } else if (bloqueado) {
       clase = "slot--bloqueado";

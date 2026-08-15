@@ -272,8 +272,8 @@
   color: var(--c-ink-500);
   background: var(--c-surface-2);
 }
-.cal-libre { background: var(--c-surface); }
-.cal-ocupado { background: var(--c-busy-bg); color: var(--c-busy-text); }
+.cal-libre { background: var(--c-free-bg); color: var(--c-free-text); }
+.cal-ocupado { background: var(--c-taken-bg); color: var(--c-taken-text); }
 .cal-bloqueado { background: var(--c-block-bg); color: var(--c-block-text); }
 .cal-pasado { background: var(--c-surface-2); color: var(--c-ink-400); }
 .cal-dato { display: block; overflow: hidden; max-width: 90px; text-overflow: ellipsis; white-space: nowrap; }
