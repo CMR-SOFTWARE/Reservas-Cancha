@@ -313,7 +313,7 @@ function renderHorarios() {
     let libre = false;
 
     if (pasado) {
-      clase = "slot--ocupado";
+      clase = "slot--pasado";
       estado = "Ya pasó";
     } else if (bloqueado) {
       clase = "slot--bloqueado";
@@ -680,21 +680,46 @@ const chipHoy = document.getElementById("chipHoy");
 const chipManana = document.getElementById("chipManana");
 const chipOtro = document.getElementById("chipOtro");
 const fechaEnPalabrasEl = document.getElementById("fechaEnPalabras");
+const btnDiaAnterior = document.getElementById("btnDiaAnterior");
+const btnDiaSiguiente = document.getElementById("btnDiaSiguiente");
 
 function setFecha(iso) {
   fechaInput.value = iso;
   fechaInput.dispatchEvent(new Event("change"));
 }
 
+// "2026-08-15" + 1 dia. Se arma con las partes para no correrse por zona horaria.
+function isoDesplazado(fechaIso, dias) {
+  const [year, month, day] = String(fechaIso).split("-").map(Number);
+  if (!Number.isFinite(year)) return fechaIso;
+  const fecha = new Date(year, month - 1, day + dias);
+  const tz = fecha.getTimezoneOffset() * 60000;
+  return new Date(fecha - tz).toISOString().split("T")[0];
+}
+
 function syncFecha() {
   const valor = fechaInput.value;
   if (fechaEnPalabrasEl) fechaEnPalabrasEl.textContent = fechaEnPalabras(valor);
+  // No se puede reservar en el pasado: la flecha de atras muere en hoy.
+  if (btnDiaAnterior) btnDiaAnterior.disabled = !valor || valor <= todayISO();
   if (chipHoy) chipHoy.setAttribute("aria-pressed", String(valor === todayISO()));
   if (chipManana) chipManana.setAttribute("aria-pressed", String(valor === isoSumandoDias(1)));
   if (chipOtro) {
     const esOtro = Boolean(valor) && valor !== todayISO() && valor !== isoSumandoDias(1);
     chipOtro.setAttribute("aria-pressed", String(esOtro));
   }
+}
+
+if (btnDiaAnterior) {
+  btnDiaAnterior.addEventListener("click", () => {
+    const anterior = isoDesplazado(fechaInput.value || todayISO(), -1);
+    if (anterior >= todayISO()) setFecha(anterior);
+  });
+}
+if (btnDiaSiguiente) {
+  btnDiaSiguiente.addEventListener("click", () => {
+    setFecha(isoDesplazado(fechaInput.value || todayISO(), 1));
+  });
 }
 
 if (chipHoy) chipHoy.addEventListener("click", () => setFecha(todayISO()));

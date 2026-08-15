@@ -14,9 +14,16 @@
     <header class="site-header">
       <div class="site-header-inner">
         <a href="/" class="site-brand">
-          <img src="/favicon.png" alt="" class="site-logo" />
+          <div id="navLogo" class="site-logo" aria-hidden="true"></div>
           <span class="site-texto"><span class="site-club">CMR Canchas</span><span class="site-sufijo"> · Panel</span></span>
         </a>
+        <button id="btnMenu" class="btn btn--ghost topbar-btn topbar-menu" type="button" hidden
+                aria-label="Abrir menú" aria-expanded="false" aria-controls="panelNav">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <path d="M3 6h18M3 12h18M3 18h18"/>
+          </svg>
+        </button>
+
         <div class="topbar-acciones" id="topbarAcciones" hidden>
           <a id="linkMenu" href="#" class="btn btn--ghost btn--sm topbar-btn" title="Ver el sitio">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -36,7 +43,7 @@
 
     <main id="loginCard" class="login-pantalla">
       <div class="card login-card">
-        <img src="/favicon.png" alt="" class="login-logo" />
+        <div id="loginLogo" class="login-logo" aria-hidden="true"></div>
         <h1 class="login-titulo">Panel de administración</h1>
         <p class="card-sub" id="loginClub"></p>
 
@@ -57,7 +64,8 @@
     </main>
 
     <div id="adminPanel" class="panel-shell" hidden>
-      <nav class="panel-nav" aria-label="Secciones del panel">
+      <div class="panel-overlay" id="panelOverlay" hidden></div>
+      <nav class="panel-nav" id="panelNav" aria-label="Secciones del panel">
         <button type="button" class="panel-nav-item is-activa" data-seccion="resumen">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
           Resumen
@@ -290,9 +298,10 @@
             <div class="field">
               <label class="label" for="filtroEstado">Estado</label>
               <select id="filtroEstado" class="select">
-                <option value="">Todas</option>
-                <option value="confirmada">Pagadas</option>
-                <option value="pendiente">Sin pagar</option>
+                <option value="">Turnos vigentes</option>
+                <option value="confirmada">Vigentes pagadas</option>
+                <option value="pendiente">Vigentes sin pagar</option>
+                <option value="pasadas">Historial (turnos pasados)</option>
               </select>
             </div>
             <div class="filtros-acciones">

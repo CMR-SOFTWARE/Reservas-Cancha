@@ -22,7 +22,12 @@ body {
   font-size: var(--fs-base);
   line-height: var(--lh-body);
   color: var(--c-ink-700);
+  /* Degrade muy suave para que el fondo no sea un blanco plano. Es CSS puro:
+     no agrega ni un byte de descarga. fixed para que no se corte al scrollear.
+     Las cards siguen blancas, asi que el contraste del texto no cambia. */
   background: var(--c-bg);
+  background-image: linear-gradient(170deg, #E9F2EC 0%, var(--c-bg) 42%, var(--c-bg) 100%);
+  background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -287,6 +292,11 @@ a:hover { color: var(--c-brand-800); text-decoration: underline; }
 }
 .turno-dato svg { flex: none; width: 16px; height: 16px; color: var(--c-ink-500); }
 
+/* Fecha con flechas para moverse de a un dia sin abrir el calendario. */
+.fecha-fila { display: flex; align-items: center; gap: var(--s-2); }
+.fecha-fila .input { flex: 1; min-width: 0; }
+.fecha-flecha { flex: none; width: 48px; padding: 0; }
+
 /* ── Chips de fecha rápida ────────────────────────────────── */
 .chips { display: flex; flex-wrap: wrap; gap: var(--s-2); }
 
@@ -360,12 +370,22 @@ a:hover { color: var(--c-brand-800); text-decoration: underline; }
 .slot--libre .slot-dot { background: var(--c-free-dot); }
 
 .slot--ocupado {
+  color: var(--c-taken-text);
+  background: var(--c-taken-bg);
+  border-color: var(--c-taken-border);
+  cursor: not-allowed;
+}
+.slot--ocupado .slot-dot { background: var(--c-taken-dot); }
+
+/* Ya paso: no es disponibilidad, es tiempo. Queda neutro para no competir con
+   los tres estados de color. */
+.slot--pasado {
   color: var(--c-busy-text);
   background: var(--c-busy-bg);
   border-color: var(--c-busy-border);
   cursor: not-allowed;
 }
-.slot--ocupado .slot-dot { border: 2px solid var(--c-busy-dot); }
+.slot--pasado .slot-dot { border: 2px solid var(--c-busy-dot); }
 
 .slot--bloqueado {
   color: var(--c-block-text);
@@ -413,10 +433,11 @@ a:hover { color: var(--c-brand-800); text-decoration: underline; }
   background: var(--c-warning-bg);
   border-color: var(--c-block-border);
 }
-.badge--cancelada {
-  color: var(--c-danger);
-  background: var(--c-danger-bg);
-  border-color: var(--c-danger-border);
+.badge--cancelada,
+.badge--bloqueado {
+  color: var(--c-block-text);
+  background: var(--c-block-bg);
+  border-color: var(--c-block-border);
 }
 
 /* ── Alert ────────────────────────────────────────────────── */

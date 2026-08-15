@@ -115,6 +115,10 @@ async function loadConfig() {
     if (loginClub) loginClub.textContent = config.nombre;
   }
 
+  // El panel mostraba el logo de CMR: va el del club, igual que en la publica.
+  pintarLogo("navLogo", "site-logo");
+  pintarLogo("loginLogo", "login-logo");
+
   // Poblar selector de cancha del calendario
   const calCanchaEl = document.getElementById("calCancha");
   if (calCanchaEl) {
@@ -137,6 +141,21 @@ async function loadConfig() {
     recHorarioDesdeEl.innerHTML = horarioOpts;
     recHorarioHastaEl.innerHTML = horarioOpts;
   }
+}
+
+// Logo del club, o sus iniciales si no cargo ninguno.
+function pintarLogo(id, clase) {
+  const el = document.getElementById(id);
+  if (!el || !config) return;
+  if (config.logoUrl) {
+    el.outerHTML = `<img id="${id}" src="${escapeHtml(config.logoUrl)}" alt="" class="${clase}" />`;
+    return;
+  }
+  const iniciales = String(config.nombre || "")
+    .split(/\s+/).slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() || "")
+    .join("");
+  el.textContent = iniciales;
 }
 
 // Duplicada de app.js a proposito: los dos scripts son independientes y no hay
@@ -179,13 +198,21 @@ function estadoBadge(estado, pasada = false) {
   return `<span class="badge ${esPagado ? "badge--ok" : "badge--pendiente"}">${esPagado ? "Pagado" : "Sin pagar"}</span>`;
 }
 
+function tituloVacioReservas() {
+  const filtro = document.getElementById("filtroEstado")?.value || "";
+  if (filtroFecha.value) return "No hay turnos para esa fecha.";
+  if (filtro === "pasadas") return "Todavía no hay turnos en el historial.";
+  if (filtro) return "No hay turnos vigentes con ese estado.";
+  return "No hay turnos próximos.";
+}
+
 function renderReservas(reservas) {
   if (!reservas.length) {
     reservasList.innerHTML = `<div class="empty">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
         <rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/>
       </svg>
-      <p><strong style="color: var(--c-ink-900)">${filtroFecha.value ? "No hay turnos para esa fecha." : "Todavía no hay turnos."}</strong></p>
+      <p><strong style="color: var(--c-ink-900)">${escapeHtml(tituloVacioReservas())}</strong></p>
       ${filtroFecha.value ? `<button type="button" class="btn btn--secondary btn--sm" id="btnVerTodasVacio">Ver todas las reservas</button>` : ""}
     </div>`;
     document.getElementById("btnVerTodasVacio")?.addEventListener("click", () => {
@@ -236,7 +263,13 @@ const ICONO_CALENDARIO = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCo
 const ICONO_TELEFONO = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.3 1.8.6 2.6a2 2 0 0 1-.5 2.1L8.1 9.5a16 16 0 0 0 6 6l1.1-1.1a2 2 0 0 1 2.1-.5c.8.3 1.7.5 2.6.6a2 2 0 0 1 1.7 2z"/></svg>`;
 const ICONO_WHATSAPP = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:16px;height:16px"><path d="M12 2a10 10 0 0 0-8.5 15.2L2 22l4.9-1.5A10 10 0 1 0 12 2zm0 18a8 8 0 0 1-4.1-1.1l-.3-.2-2.9.8.8-2.8-.2-.3A8 8 0 1 1 12 20zm4.4-5.6c-.2-.1-1.4-.7-1.6-.8-.2-.1-.4-.1-.5.1l-.7.9c-.1.2-.3.2-.5.1a6.5 6.5 0 0 1-3.2-2.8c-.1-.2 0-.4.1-.5l.4-.5.2-.4v-.4l-.8-1.8c-.2-.5-.4-.4-.5-.4h-.5a1 1 0 0 0-.7.3c-.3.3-1 1-1 2.4s1 2.8 1.2 3a9.6 9.6 0 0 0 4.9 4.3c1.3.4 1.8.4 2.4.3.7-.1 1.4-.6 1.6-1.2.2-.6.2-1.1.1-1.2z"/></svg>`;
 
-function renderBloqueos(bloqueos) {
+// Un bloqueo de ayer ya no bloquea nada: la card se llama "Bloqueos activos".
+function esBloqueoVigente(bloqueo) {
+  return String(bloqueo.fecha) >= todayISO();
+}
+
+function renderBloqueos(todos) {
+  const bloqueos = (todos || []).filter(esBloqueoVigente);
   if (!bloqueos.length) {
     bloqueosList.innerHTML = `<div class="empty">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
@@ -253,7 +286,7 @@ function renderBloqueos(bloqueos) {
     <article class="bloqueo-card">
       <div style="display: flex; align-items: start; justify-content: space-between; gap: var(--s-3)">
         <p class="bloqueo-cancha">${escapeHtml(getCanchaEtiqueta(b.cancha))}</p>
-        <span class="badge badge--pendiente">Bloqueado</span>
+        <span class="badge badge--bloqueado">Bloqueado</span>
       </div>
       <p style="margin-top: var(--s-2)">${escapeHtml(formatFecha(b.fecha))}</p>
       <p>${escapeHtml(describeBloqueoHorario(b))}</p>
@@ -278,14 +311,22 @@ const filtroFecha = document.getElementById("filtroFecha");
 const btnFiltrarReservas = document.getElementById("btnFiltrarReservas");
 const btnLimpiarFiltro = document.getElementById("btnLimpiarFiltro");
 
+// El filtrado es en el cliente: la API no tiene esos parametros y no se
+// inventan endpoints. Los turnos pasados no se borran, solo salen de la vista
+// por defecto y se consultan con el filtro "Pasados".
+function aplicarFiltroEstado(reservas) {
+  const filtro = document.getElementById("filtroEstado")?.value || "";
+  if (filtro === "pasadas") return reservas.filter((r) => r.pasada);
+  const vigentes = reservas.filter((r) => !r.pasada);
+  if (!filtro) return vigentes;
+  return vigentes.filter((r) => (r.estado || "pendiente") === filtro);
+}
+
 async function loadReservasAdmin(fecha = "") {
   const qs = fecha ? `?fecha=${encodeURIComponent(fecha)}` : "";
   const reservas = await api(`/api/${CLUB_SLUG}/admin/reservas${qs}`);
   reservasActuales = reservas;
-  // El estado se filtra en el cliente: la API no tiene ese parametro y no se
-  // inventan endpoints.
-  const estado = document.getElementById("filtroEstado")?.value || "";
-  renderReservas(estado ? reservas.filter((r) => (r.estado || "pendiente") === estado) : reservas);
+  renderReservas(aplicarFiltroEstado(reservas));
 }
 
 async function refreshAdminData() {
@@ -314,7 +355,7 @@ function renderResumen(bloqueos = []) {
   set("mtHoy", deHoy.length);
   set("mtManana", vigentes.filter((r) => r.fecha === manana).length);
   set("mtPendientes", vigentes.filter((r) => r.estado !== "confirmada").length);
-  set("mtBloqueos", bloqueos.filter((b) => b.fecha >= hoy).length);
+  set("mtBloqueos", bloqueos.filter(esBloqueoVigente).length);
 
   const lista = document.getElementById("turnosDeHoy");
   if (!lista) return;
@@ -355,6 +396,9 @@ function setAuthenticatedUI(isAuth) {
   adminPanel.hidden = !isAuth;
   const acciones = document.getElementById("topbarAcciones");
   if (acciones) acciones.hidden = !isAuth;
+  // El menu solo tiene sentido con sesion abierta.
+  const menu = document.getElementById("btnMenu");
+  if (menu) menu.hidden = !isAuth;
 }
 
 // ── Navegacion entre secciones ────────────────────────────────
@@ -372,8 +416,71 @@ function mostrarSeccion(nombre) {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
+// ── Cajon lateral (mobile) ────────────────────────────────────
+// De 1024px para arriba la nav es fija y el cajon no existe: el CSS oculta el
+// boton y el overlay, y esta logica queda sin efecto.
+const panelNav = document.getElementById("panelNav");
+const panelOverlay = document.getElementById("panelOverlay");
+const btnMenu = document.getElementById("btnMenu");
+let focoPrevioMenu = null;
+
+function menuEsCajon() {
+  return window.matchMedia("(max-width: 1023px)").matches;
+}
+
+function abrirMenu() {
+  if (!menuEsCajon()) return;
+  focoPrevioMenu = document.activeElement;
+  panelNav.classList.add("is-abierta");
+  panelOverlay.hidden = false;
+  btnMenu.setAttribute("aria-expanded", "true");
+  document.body.style.overflow = "hidden";
+  panelNav.querySelector(".panel-nav-item")?.focus();
+}
+
+function cerrarMenu({ devolverFoco = true } = {}) {
+  panelNav.classList.remove("is-abierta");
+  panelOverlay.hidden = true;
+  btnMenu.setAttribute("aria-expanded", "false");
+  document.body.style.overflow = "";
+  if (devolverFoco && focoPrevioMenu && document.contains(focoPrevioMenu)) focoPrevioMenu.focus();
+}
+
+function menuAbierto() {
+  return panelNav.classList.contains("is-abierta");
+}
+
+btnMenu?.addEventListener("click", () => (menuAbierto() ? cerrarMenu() : abrirMenu()));
+panelOverlay?.addEventListener("click", () => cerrarMenu());
+
+document.addEventListener("keydown", (event) => {
+  if (!menuAbierto()) return;
+  if (event.key === "Escape") { cerrarMenu(); return; }
+  if (event.key !== "Tab") return;
+  // Foco atrapado dentro del cajon mientras esta abierto.
+  const focheables = panelNav.querySelectorAll("button, a[href]");
+  if (!focheables.length) return;
+  const primero = focheables[0];
+  const ultimo = focheables[focheables.length - 1];
+  if (event.shiftKey && document.activeElement === primero) {
+    event.preventDefault();
+    ultimo.focus();
+  } else if (!event.shiftKey && document.activeElement === ultimo) {
+    event.preventDefault();
+    primero.focus();
+  }
+});
+
+// Si la ventana se agranda con el cajon abierto, hay que soltar el scroll.
+window.addEventListener("resize", () => {
+  if (!menuEsCajon() && menuAbierto()) cerrarMenu({ devolverFoco: false });
+});
+
 document.querySelectorAll(".panel-nav-item").forEach((item) => {
-  item.addEventListener("click", () => mostrarSeccion(item.dataset.seccion));
+  item.addEventListener("click", () => {
+    mostrarSeccion(item.dataset.seccion);
+    if (menuAbierto()) cerrarMenu();
+  });
 });
 document.querySelectorAll("[data-ir-a]").forEach((boton) => {
   boton.addEventListener("click", () => mostrarSeccion(boton.dataset.irA));
