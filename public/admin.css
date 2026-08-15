@@ -194,6 +194,89 @@
   outline-offset: 2px;
 }
 
+/* ── Formulario embebido (bloqueos recurrentes) ───────────── */
+.form-embebido {
+  margin-top: var(--s-4);
+  padding: var(--s-4);
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+}
+.opciones-inline {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-top: var(--s-4);
+}
+.checkbox { width: 20px; height: 20px; accent-color: var(--c-brand-700); cursor: pointer; }
+.acciones-fila { display: flex; flex-wrap: wrap; gap: var(--s-3); margin-top: var(--s-5); }
+
+/* ── Calendario semanal ───────────────────────────────────── */
+.calendario-barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--s-4);
+  margin-top: var(--s-4);
+}
+.calendario-semana { display: flex; align-items: center; gap: var(--s-2); }
+.calendario-label {
+  min-width: 150px;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semi);
+  color: var(--c-ink-700);
+  text-align: center;
+}
+/* Unica zona con scroll horizontal permitido, y dentro de su contenedor. */
+.calendario-grilla {
+  margin-top: var(--s-4);
+  overflow-x: auto;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+}
+.calendario-grilla table { width: 100%; border-collapse: collapse; }
+.calendario-grilla th,
+.calendario-grilla td {
+  min-height: 44px;
+  padding: var(--s-2);
+  font-size: var(--fs-xs);
+  border-right: 1px solid var(--c-border);
+  border-bottom: 1px solid var(--c-border);
+}
+.calendario-grilla th {
+  position: sticky;
+  top: 0;
+  font-weight: var(--fw-semi);
+  color: var(--c-ink-700);
+  background: var(--c-surface-2);
+}
+.cal-hora {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 52px;
+  font-weight: var(--fw-semi);
+  color: var(--c-ink-500);
+  background: var(--c-surface-2);
+}
+.cal-libre { background: var(--c-surface); }
+.cal-ocupado { background: var(--c-busy-bg); color: var(--c-busy-text); }
+.cal-bloqueado { background: var(--c-block-bg); color: var(--c-block-text); }
+.cal-pasado { background: var(--c-surface-2); color: var(--c-ink-400); }
+.cal-dato { display: block; overflow: hidden; max-width: 90px; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Bloqueo recurrente ───────────────────────────────────── */
+.recurrente-card {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+}
+
 /* ── Grilla de cards (bloqueos, reservas) ─────────────────── */
 .grilla-cards {
   display: grid;

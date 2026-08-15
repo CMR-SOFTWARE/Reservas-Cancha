@@ -8,7 +8,6 @@
     <link rel="stylesheet" href="/tokens.css" />
     <link rel="stylesheet" href="/styles.css" />
     <link rel="stylesheet" href="/admin.css" />
-    <script src="https://cdn.tailwindcss.com"></script>
   </head>
   <body>
 
@@ -35,7 +34,7 @@
       </div>
     </header>
 
-    <div id="loginCard" class="login-pantalla">
+    <main id="loginCard" class="login-pantalla">
       <div class="card login-card">
         <img src="/favicon.png" alt="" class="login-logo" />
         <h1 class="login-titulo">Panel de administración</h1>
@@ -55,9 +54,9 @@
           Ingresar
         </button>
       </div>
-    </div>
+    </main>
 
-    <div id="adminPanel" class="hidden panel-shell">
+    <div id="adminPanel" class="panel-shell" hidden>
       <nav class="panel-nav" aria-label="Secciones del panel">
         <button type="button" class="panel-nav-item is-activa" data-seccion="resumen">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
@@ -208,27 +207,26 @@
           <div id="bloqueosList" class="grilla-cards card-body"></div>
         </section>
 
-        <section class="mb-4 rounded-xl bg-white p-4 shadow-sm">
-          <div class="flex items-start justify-between gap-2">
+        <section class="card" style="margin-top: var(--s-5)">
+          <div class="reservas-cabecera">
             <div>
-              <h2 class="text-xl font-semibold text-green-900">Bloqueos recurrentes</h2>
-              <p class="text-xs text-slate-400 mt-0.5">Se aplican automáticamente cada semana</p>
+              <h2 class="card-title">Bloqueos recurrentes</h2>
+              <p class="card-sub">Se aplican automáticamente cada semana.</p>
             </div>
-            <button id="btnToggleBloqRec" type="button"
-              class="rounded-lg bg-green-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-green-800 shrink-0">
+            <button id="btnToggleBloqRec" type="button" class="btn btn--secondary btn--sm">
               + Nuevo
             </button>
           </div>
 
-          <div id="formBloqRecContainer" class="hidden mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
-            <div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
-              <div class="flex flex-col gap-1">
-                <label class="text-sm font-medium" for="recCancha">Cancha</label>
-                <select id="recCancha" class="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"></select>
+          <div id="formBloqRecContainer" class="hidden form-embebido">
+            <div class="config-grid">
+              <div class="field">
+                <label class="label" for="recCancha">Cancha</label>
+                <select id="recCancha" class="select"></select>
               </div>
-              <div class="flex flex-col gap-1">
-                <label class="text-sm font-medium" for="recDiaSemana">Día de la semana</label>
-                <select id="recDiaSemana" class="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+              <div class="field">
+                <label class="label" for="recDiaSemana">Día de la semana</label>
+                <select id="recDiaSemana" class="select">
                   <option value="1">Lunes</option>
                   <option value="2">Martes</option>
                   <option value="3">Miércoles</option>
@@ -238,38 +236,35 @@
                   <option value="0">Domingo</option>
                 </select>
               </div>
-              <div class="flex flex-col gap-1">
-                <label class="text-sm font-medium" for="recHorarioDesde">Horario desde</label>
-                <select id="recHorarioDesde" class="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"></select>
+              <div class="field">
+                <label class="label" for="recHorarioDesde">Horario desde</label>
+                <select id="recHorarioDesde" class="select"></select>
               </div>
-              <div class="flex flex-col gap-1">
-                <label class="text-sm font-medium" for="recHorarioHasta">Horario hasta</label>
-                <select id="recHorarioHasta" class="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"></select>
+              <div class="field">
+                <label class="label" for="recHorarioHasta">Horario hasta</label>
+                <select id="recHorarioHasta" class="select"></select>
               </div>
             </div>
-            <div class="mt-3 flex items-center gap-2">
-              <input id="recDiaCompleto" type="checkbox" class="h-4 w-4 accent-green-700" />
-              <label for="recDiaCompleto" class="text-sm font-medium">Día completo</label>
+            <div class="opciones-inline">
+              <input id="recDiaCompleto" type="checkbox" class="checkbox" />
+              <label for="recDiaCompleto" class="label">Día completo</label>
             </div>
-            <div class="mt-3 flex flex-col gap-1">
-              <label class="text-sm font-medium" for="recMotivo">Motivo</label>
-              <input id="recMotivo" type="text" placeholder="Ej: Liga reservada"
-                class="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+            <div class="field" style="margin-top: var(--s-4)">
+              <label class="label" for="recMotivo">Motivo</label>
+              <input id="recMotivo" type="text" placeholder="Ej: Liga reservada" class="input" />
             </div>
-            <div class="mt-3 flex gap-2">
-              <button id="btnGuardarBloqRec" type="button"
-                class="rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800">
+            <div class="acciones-fila">
+              <button id="btnGuardarBloqRec" type="button" class="btn btn--primary">
                 Guardar bloqueo
               </button>
-              <button id="btnCancelarBloqRec" type="button"
-                class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">
+              <button id="btnCancelarBloqRec" type="button" class="btn btn--secondary">
                 Cancelar
               </button>
             </div>
-            <p id="recMsg" class="mt-2 min-h-5 text-sm font-semibold"></p>
+            <div id="recMsg" style="margin-top: var(--s-3)"></div>
           </div>
 
-          <div id="bloqueosRecurrentesList" class="mt-4 grid gap-3"></div>
+          <div id="bloqueosRecurrentesList" class="grilla-cards card-body"></div>
         </section>
         </section>
 
@@ -313,20 +308,18 @@
           </div>
           <!-- Vista calendario -->
           <div id="vistaCalendario" class="hidden">
-            <div class="mb-3 flex flex-wrap items-center gap-3">
-              <label class="text-sm font-medium text-slate-600">Cancha:</label>
-              <select id="calCancha"
-                class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"></select>
-              <div class="flex items-center gap-2">
-                <button id="btnCalPrev" type="button"
-                  class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">&#8592; Anterior</button>
-                <span id="calSemanaLabel"
-                  class="min-w-[150px] text-center text-sm font-semibold text-slate-700"></span>
-                <button id="btnCalNext" type="button"
-                  class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">Siguiente &#8594;</button>
+            <div class="calendario-barra">
+              <div class="field" style="flex: 0 1 220px">
+                <label class="label" for="calCancha">Cancha</label>
+                <select id="calCancha" class="select"></select>
+              </div>
+              <div class="calendario-semana">
+                <button id="btnCalPrev" type="button" class="btn btn--secondary btn--sm" aria-label="Semana anterior">&#8592; Anterior</button>
+                <span id="calSemanaLabel" class="calendario-label" aria-live="polite"></span>
+                <button id="btnCalNext" type="button" class="btn btn--secondary btn--sm" aria-label="Semana siguiente">Siguiente &#8594;</button>
               </div>
             </div>
-            <div id="calGrid" class="overflow-x-auto rounded-lg border border-slate-200"></div>
+            <div id="calGrid" class="calendario-grilla"></div>
           </div>
         </section>
         </section>
@@ -440,35 +433,32 @@
     <script src="/admin.js" defer></script>
 
     <!-- Footer -->
-    <footer class="bg-green-950 text-green-200 mt-10">
-      <div class="mx-auto max-w-5xl px-6 py-10">
-        <div class="flex flex-col items-center gap-8 sm:flex-row sm:justify-between">
-          <div class="flex items-center gap-3">
-            <img src="/favicon.png" alt="CMR Software" class="h-10 w-10 rounded-lg object-contain" />
+    <footer class="site-footer">
+      <div class="site-footer-inner">
+        <div class="site-footer-top">
+          <div class="site-footer-marca">
+            <img src="/favicon.png" alt="CMR Software" />
             <div>
-              <p class="font-bold text-white text-base leading-tight">CMR Canchas</p>
-              <p class="text-xs text-green-500">by CMR Software Solutions</p>
+              <p class="site-footer-nombre">CMR Canchas</p>
+              <p class="site-footer-legal">by CMR Software Solutions</p>
             </div>
           </div>
-          <div class="flex flex-col gap-3 text-sm text-center sm:text-right">
-            <a href="https://wa.me/5493364578599" target="_blank" rel="noopener noreferrer"
-               class="flex items-center justify-center sm:justify-end gap-2 hover:text-green-400 transition-colors">
-              <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+          <div class="site-footer-contacto">
+            <a href="https://wa.me/5493364578599" target="_blank" rel="noopener noreferrer">
+              <svg viewBox="0 0 24 24" fill="currentColor">
                 <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
                 <path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.558 4.121 1.532 5.851L.057 23.446a.75.75 0 0 0 .916.972l5.762-1.51A11.943 11.943 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.861 0-3.607-.505-5.106-1.386l-.363-.215-3.773.989.999-3.681-.236-.373A9.944 9.944 0 0 1 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/>
               </svg>
               <span>+54 9 336 457-8599</span>
             </a>
-            <a href="https://www.instagram.com/cmrsoftware.sn?igsh=MWFnOGpwa3M3aHV2Zw==" target="_blank" rel="noopener noreferrer"
-               class="flex items-center justify-center sm:justify-end gap-2 hover:text-pink-400 transition-colors">
-              <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+            <a href="https://www.instagram.com/cmrsoftware.sn?igsh=MWFnOGpwa3M3aHV2Zw==" target="_blank" rel="noopener noreferrer">
+              <svg viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 1 0 0 12.324 6.162 6.162 0 0 0 0-12.324zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z"/>
               </svg>
               <span>@cmrsoftware.sn</span>
             </a>
-            <a href="mailto:cmrsoftware.sn@gmail.com"
-               class="flex items-center justify-center sm:justify-end gap-2 hover:text-blue-400 transition-colors">
-              <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <a href="mailto:cmrsoftware.sn@gmail.com">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="2" y="4" width="20" height="16" rx="2"/>
                 <path d="m22 7-10 7L2 7"/>
               </svg>
@@ -476,7 +466,7 @@
             </a>
           </div>
         </div>
-        <div class="mt-8 border-t border-green-800 pt-6 text-center text-xs text-green-600">
+        <div class="site-footer-sep"></div><p class="site-footer-legal">
           © 2025 CMR Software Solutions. Todos los derechos reservados.
         </div>
       </div>
