@@ -396,6 +396,9 @@ function setAuthenticatedUI(isAuth) {
   adminPanel.hidden = !isAuth;
   const acciones = document.getElementById("topbarAcciones");
   if (acciones) acciones.hidden = !isAuth;
+  // El menu solo tiene sentido con sesion abierta.
+  const menu = document.getElementById("btnMenu");
+  if (menu) menu.hidden = !isAuth;
 }
 
 // ── Navegacion entre secciones ────────────────────────────────
@@ -413,8 +416,71 @@ function mostrarSeccion(nombre) {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
+// ── Cajon lateral (mobile) ────────────────────────────────────
+// De 1024px para arriba la nav es fija y el cajon no existe: el CSS oculta el
+// boton y el overlay, y esta logica queda sin efecto.
+const panelNav = document.getElementById("panelNav");
+const panelOverlay = document.getElementById("panelOverlay");
+const btnMenu = document.getElementById("btnMenu");
+let focoPrevioMenu = null;
+
+function menuEsCajon() {
+  return window.matchMedia("(max-width: 1023px)").matches;
+}
+
+function abrirMenu() {
+  if (!menuEsCajon()) return;
+  focoPrevioMenu = document.activeElement;
+  panelNav.classList.add("is-abierta");
+  panelOverlay.hidden = false;
+  btnMenu.setAttribute("aria-expanded", "true");
+  document.body.style.overflow = "hidden";
+  panelNav.querySelector(".panel-nav-item")?.focus();
+}
+
+function cerrarMenu({ devolverFoco = true } = {}) {
+  panelNav.classList.remove("is-abierta");
+  panelOverlay.hidden = true;
+  btnMenu.setAttribute("aria-expanded", "false");
+  document.body.style.overflow = "";
+  if (devolverFoco && focoPrevioMenu && document.contains(focoPrevioMenu)) focoPrevioMenu.focus();
+}
+
+function menuAbierto() {
+  return panelNav.classList.contains("is-abierta");
+}
+
+btnMenu?.addEventListener("click", () => (menuAbierto() ? cerrarMenu() : abrirMenu()));
+panelOverlay?.addEventListener("click", () => cerrarMenu());
+
+document.addEventListener("keydown", (event) => {
+  if (!menuAbierto()) return;
+  if (event.key === "Escape") { cerrarMenu(); return; }
+  if (event.key !== "Tab") return;
+  // Foco atrapado dentro del cajon mientras esta abierto.
+  const focheables = panelNav.querySelectorAll("button, a[href]");
+  if (!focheables.length) return;
+  const primero = focheables[0];
+  const ultimo = focheables[focheables.length - 1];
+  if (event.shiftKey && document.activeElement === primero) {
+    event.preventDefault();
+    ultimo.focus();
+  } else if (!event.shiftKey && document.activeElement === ultimo) {
+    event.preventDefault();
+    primero.focus();
+  }
+});
+
+// Si la ventana se agranda con el cajon abierto, hay que soltar el scroll.
+window.addEventListener("resize", () => {
+  if (!menuEsCajon() && menuAbierto()) cerrarMenu({ devolverFoco: false });
+});
+
 document.querySelectorAll(".panel-nav-item").forEach((item) => {
-  item.addEventListener("click", () => mostrarSeccion(item.dataset.seccion));
+  item.addEventListener("click", () => {
+    mostrarSeccion(item.dataset.seccion);
+    if (menuAbierto()) cerrarMenu();
+  });
 });
 document.querySelectorAll("[data-ir-a]").forEach((boton) => {
   boton.addEventListener("click", () => mostrarSeccion(boton.dataset.irA));
